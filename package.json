@@ -1,0 +1,26 @@
+{
+  "name": "mongo-to-es",
+  "version": "1.0.0",
+  "description": "Node.js command-line tool to migrate MongoDB order data to Elasticsearch using streams for maximum performance",
+  "main": "src/cli.js",
+  "bin": {
+    "mongo-to-es": "src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js"
+  },
+  "keywords": [
+    "mongodb",
+    "elasticsearch",
+    "etl",
+    "stream",
+    "migration"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.1.0",
+    "elasticsearch": "^16.7.3",
+    "mongodb": "^6.3.0"
+  }
+}
