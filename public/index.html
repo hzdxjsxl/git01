@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Print G-code Preview Viewer</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #0d0d1a;
+      color: #e0e0e0;
+    }
+
+    #renderCanvas {
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    .controls {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background-color: rgba(20, 20, 40, 0.95);
+      border: 1px solid #333366;
+      border-radius: 8px;
+      padding: 20px;
+      width: 320px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+    }
+
+    .controls h2 {
+      margin: 0 0 15px 0;
+      font-size: 18px;
+      color: #4da6ff;
+      border-bottom: 1px solid #333366;
+      padding-bottom: 10px;
+    }
+
+    .control-group {
+      margin-bottom: 15px;
+    }
+
+    .control-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+      color: #a0a0c0;
+    }
+
+    .control-group input[type="text"],
+    .control-group input[type="number"],
+    .control-group select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #333366;
+      border-radius: 4px;
+      background-color: #1a1a2e;
+      color: #e0e0e0;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+
+    .control-group input[type="text"]:focus,
+    .control-group input[type="number"]:focus,
+    .control-group select:focus {
+      outline: none;
+      border-color: #4da6ff;
+    }
+
+    .control-group input[type="file"] {
+      width: 100%;
+      padding: 8px 0;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      margin-right: 10px;
+      transform: scale(1.2);
+    }
+
+    .checkbox-group label {
+      margin: 0;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .primary-btn {
+      background-color: #4da6ff;
+      color: #0d0d1a;
+      font-weight: 600;
+    }
+
+    .primary-btn:hover {
+      background-color: #66b3ff;
+    }
+
+    .primary-btn:disabled {
+      background-color: #334455;
+      color: #888888;
+      cursor: not-allowed;
+    }
+
+    .secondary-btn {
+      background-color: #2a2a4a;
+      color: #e0e0e0;
+      border: 1px solid #333366;
+    }
+
+    .secondary-btn:hover {
+      background-color: #3a3a5a;
+    }
+
+    .info-panel {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #1a1a2e;
+      border-radius: 4px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #a0a0c0;
+    }
+
+    .info-panel strong {
+      color: #4da6ff;
+    }
+
+    .loading {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 20px 40px;
+      border-radius: 8px;
+      font-size: 16px;
+      z-index: 100;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #4da6ff;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .instructions {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background-color: rgba(20, 20, 40, 0.9);
+      border: 1px solid #333366;
+      border-radius: 8px;
+      padding: 15px;
+      font-size: 12px;
+      color: #a0a0c0;
+      max-width: 200px;
+      z-index: 10;
+    }
+
+    .instructions strong {
+      color: #4da6ff;
+    }
+
+    .layer-controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    .layer-controls input {
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="renderCanvas"></canvas>
+
+  <div class="controls">
+    <h2>3D Print G-code Viewer</h2>
+
+    <div class="control-group">
+      <label for="fileSelect">Select G-code File:</label>
+      <select id="fileSelect">
+        <option value="">-- Select G-code File --</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <button id="loadButton" class="primary-btn" disabled>
+        Load and Render
+      </button>
+    </div>
+
+    <div class="control-group">
+      <button id="uploadButton" class="secondary-btn">
+        Upload Local File
+      </button>
+      <input type="file" id="fileInput" accept=".gcode,.g" style="display: none;">
+    </div>
+
+    <div class="control-group">
+      <label>Display Options:</label>
+      <div class="checkbox-group">
+        <input type="checkbox" id="showTravel">
+        <label for="showTravel">Show Travel Moves (gray)</label>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="showRapid">
+        <label for="showRapid">Show Rapid Moves (red)</label>
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="useRibbon">
+        <label for="useRibbon">Use Ribbon (solid 3D)</label>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Layer Range:</label>
+      <div class="layer-controls">
+        <input type="number" id="layerStart" placeholder="Start" min="0" value="0">
+        <input type="number" id="layerEnd" placeholder="End" min="0">
+      </div>
+    </div>
+
+    <div id="infoPanel" class="info-panel">
+      <strong>Model Information</strong><br><br>
+      Load a G-code file to see model details...
+    </div>
+  </div>
+
+  <div id="loadingIndicator" class="loading">
+    <span class="spinner"></span>
+    Loading...
+  </div>
+
+  <div class="instructions">
+    <strong>Controls:</strong><br>
+    • Left Click + Drag: Rotate<br>
+    • Right Click + Drag: Pan<br>
+    • Mouse Wheel: Zoom<br><br>
+    <strong>Colors:</strong><br>
+    • <span style="color: #00ccff;">Cyan</span>: Extrusion<br>
+    • <span style="color: #ff0000;">Red</span>: Rapid (G0)<br>
+    • <span style="color: #808080;">Gray</span>: Travel<br>
+  </div>
+
+  <script src="/node_modules/babylonjs/babylon.js"></script>
+  <script src="/js/bundle.js"></script>
+</body>
+</html>
