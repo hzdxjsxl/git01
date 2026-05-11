@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   Point,
   Rectangle,
@@ -9,11 +10,11 @@ import {
   getColorByCount
 } from './utils/QuadTree';
 
-mapboxgl.accessToken = 'pk.eyJ1IjoicHVibGljLXRlc3RlciIsImEiOiJja210bnV3OGgwM2lhMnBwNjR3dDQ2bmV0In0.fake-token';
-
 function App() {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
+  const layerGroupRef = useRef(null);
+  const heatLayerRef = useRef(null);
   const quadTreeRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState('正在准备地图...');
@@ -24,18 +25,21 @@ function App() {
   });
 
   useEffect(() => {
-    const map = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
-      center: [108, 35],
+    const map = L.map(mapContainerRef.current, {
+      center: [35, 108],
       zoom: 4,
       minZoom: 2,
       maxZoom: 12
     });
 
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 20
+    }).addTo(map);
 
     mapRef.current = map;
+    layerGroupRef.current = L.layerGroup().addTo(map);
 
     const buildQuadTree = async (cases) => {
       setLoadingProgress('构建四叉树索引...');
@@ -84,7 +88,7 @@ function App() {
       }
     };
 
-    map.on('load', fetchData);
+    setTimeout(fetchData, 100);
 
     const onMoveEnd = () => {
       if (quadTreeRef.current && !loading) {
@@ -96,7 +100,6 @@ function App() {
     map.on('zoomend', onMoveEnd);
 
     return () => {
-      map.off('load', fetchData);
       map.off('moveend', onMoveEnd);
       map.off('zoomend', onMoveEnd);
       map.remove();
@@ -164,179 +167,81 @@ function App() {
       currentZoom: zoom
     });
 
-    const geojson = {
-      type: 'FeatureCollection',
-      features: clusters.map((cluster) => ({
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: [cluster.lng, cluster.lat]
-        },
-        properties: {
-          count: cluster.count,
-          avgDays: Math.round(cluster.avgDays),
-          size: getClusterSize(cluster.count),
-          color: getColorByCount(cluster.count)
-        }
-      }))
-    };
+    const layerGroup = layerGroupRef.current;
+    if (layerGroup) {
+      layerGroup.clearLayers();
+    }
 
-    const sourceId = 'infection-clusters';
-    const circleLayerId = 'infection-circles';
-    const labelLayerId = 'infection-labels';
-    const heatLayerId = 'infection-heat';
+    const zoomFactor = Math.max(0.5, Math.min(1.2, (zoom - 2) / 8 + 0.5));
 
-    if (!map.getSource(sourceId)) {
-      map.addSource(sourceId, {
-        type: 'geojson',
-        data: geojson,
-        buffer: 64
+    for (const cluster of clusters) {
+      const size = getClusterSize(cluster.count) * zoomFactor;
+      const color = getColorByCount(cluster.count);
+
+      if (zoom < 5) {
+        const heatOpacity = Math.max(0.3, Math.min(0.8, 0.8 - (zoom - 2) * 0.2));
+        const heatRadius = Math.max(10000, 50000 - (zoom - 2) * 8000);
+        const heatIntensity = Math.min(1, cluster.count / 1000);
+        const heatColor = getHeatColor(cluster.count);
+
+        const heatCircle = L.circle([cluster.lat, cluster.lng], {
+          radius: heatRadius,
+          color: heatColor,
+          fillColor: heatColor,
+          fillOpacity: heatOpacity * heatIntensity,
+          opacity: 0,
+          weight: 0
+        });
+        layerGroup.addLayer(heatCircle);
+      }
+
+      const circleOpacity = zoom < 5 ? 0.6 : 0.85;
+      const blur = zoom < 6 ? 8 : 0;
+
+      const marker = L.circleMarker([cluster.lat, cluster.lng], {
+        radius: size / 2,
+        color: 'rgba(255, 255, 255, 0.4)',
+        weight: cluster.count > 100 ? 2 : 1,
+        fillColor: color,
+        fillOpacity: circleOpacity
       });
 
-      map.addLayer({
-        id: heatLayerId,
-        type: 'heatmap',
-        source: sourceId,
-        maxzoom: 12,
-        paint: {
-          'heatmap-weight': [
-            'interpolate',
-            ['exponential', 0.5],
-            ['get', 'count'],
-            1, 0.1,
-            100, 0.5,
-            1000, 1
-          ],
-          'heatmap-intensity': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            0, 1,
-            12, 3
-          ],
-          'heatmap-color': [
-            'interpolate',
-            ['linear'],
-            ['heatmap-density'],
-            0, 'rgba(254, 243, 199, 0)',
-            0.1, 'rgba(254, 243, 199, 0.3)',
-            0.2, 'rgba(253, 224, 71, 0.4)',
-            0.4, 'rgba(251, 146, 60, 0.5)',
-            0.6, 'rgba(249, 115, 22, 0.6)',
-            0.8, 'rgba(239, 68, 68, 0.7)',
-            1, 'rgba(220, 38, 38, 0.8)'
-          ],
-          'heatmap-radius': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            0, 30,
-            12, 60
-          ],
-          'heatmap-opacity': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            3, 0.8,
-            8, 0.4,
-            12, 0
-          ]
-        }
-      });
+      const popupContent = `
+        <div style="font-size: 14px;">
+          <strong>${cluster.count.toLocaleString()} 例确诊</strong>
+          <div style="margin-top: 6px; color: #94a3b8; font-size: 12px;">
+            平均确诊天数: ${Math.round(cluster.avgDays)} 天
+          </div>
+        </div>
+      `;
 
-      map.addLayer({
-        id: circleLayerId,
-        type: 'circle',
-        source: sourceId,
-        minzoom: 4,
-        paint: {
-          'circle-radius': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            4, ['*', 0.6, ['get', 'size']],
-            12, ['get', 'size']
-          ],
-          'circle-color': ['get', 'color'],
-          'circle-opacity': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            4, 0.6,
-            8, 0.8
-          ],
-          'circle-stroke-width': [
-            'interpolate',
-            ['linear'],
-            ['get', 'count'],
-            1, 1,
-            1000, 2
-          ],
-          'circle-stroke-color': 'rgba(255, 255, 255, 0.4)',
-          'circle-blur': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            4, 0.5,
-            8, 0.2
-          ]
-        }
-      });
+      marker.bindPopup(popupContent);
+      layerGroup.addLayer(marker);
 
-      map.addLayer({
-        id: labelLayerId,
-        type: 'symbol',
-        source: sourceId,
-        minzoom: 6,
-        layout: {
-          'text-field': [
-            'case',
-            ['>', ['get', 'count'], 1],
-            ['to-string', ['get', 'count']],
-            ''
-          ],
-          'text-size': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            6, 10,
-            12, 14
-          ],
-          'text-anchor': 'center',
-          'text-ignore-placement': true,
-          'text-allow-overlap': true
-        },
-        paint: {
-          'text-color': '#ffffff',
-          'text-halo-color': 'rgba(0, 0, 0, 0.7)',
-          'text-halo-width': 1.5
-        }
-      });
+      if (zoom >= 6 && cluster.count > 1) {
+        const label = L.divIcon({
+          className: 'custom-label',
+          html: `<div style="color: white; font-weight: 600; text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.9); font-size: ${Math.max(10, 10 + (zoom - 6) * 0.8)}px; white-space: nowrap; pointer-events: none;">${cluster.count}</div>`,
+          iconSize: [30, 20],
+          iconAnchor: [15, 10]
+        });
 
-      map.on('click', circleLayerId, (e) => {
-        const feature = e.features[0];
-        const coordinates = feature.geometry.coordinates.slice();
-        const count = feature.properties.count;
-        const avgDays = feature.properties.avgDays;
-
-        new mapboxgl.Popup()
-          .setLngLat(coordinates)
-          .setHTML(
-            `<div style="font-size: 14px;">
-              <strong>${count.toLocaleString()} 例确诊</strong>
-              <div style="margin-top: 6px; color: #94a3b8; font-size: 12px;">
-                平均确诊天数: ${avgDays} 天
-              </div>
-            </div>`
-          )
-          .addTo(map);
-      });
-
-      map.getCanvas().style.cursor = 'pointer';
-    } else {
-      map.getSource(sourceId).setData(geojson);
+        const labelMarker = L.marker([cluster.lat, cluster.lng], {
+          icon: label,
+          interactive: false
+        });
+        layerGroup.addLayer(labelMarker);
+      }
     }
   }
+}
+
+function getHeatColor(count) {
+  if (count <= 10) return 'rgba(254, 243, 199, 0.6)';
+  if (count <= 50) return 'rgba(253, 224, 71, 0.7)';
+  if (count <= 200) return 'rgba(251, 146, 60, 0.75)';
+  if (count <= 1000) return 'rgba(249, 115, 22, 0.8)';
+  return 'rgba(239, 68, 68, 0.85)';
 }
 
 export default App;
