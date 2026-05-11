@@ -91,11 +91,13 @@
   function handleReading(reading: { timestamp: number; powerWatts: number; meterId: string }) {
     currentPower = reading.powerWatts;
 
-    const record = calculator.processReading(reading);
+    const records = calculator.processReading(reading);
 
-    if (record) {
+    if (records.length > 0) {
       updateStats();
-      addToChart(record);
+      for (const record of records) {
+        addToChart(record);
+      }
     }
   }
 

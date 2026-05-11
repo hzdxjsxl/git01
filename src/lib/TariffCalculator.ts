@@ -84,6 +84,7 @@ export class TariffCalculator {
   private billingRecords: BillingRecord[] = [];
   private dailyStats: Map<string, DailyStats> = new Map();
   private lastTimestamp: number = 0;
+  private sortedTimeRanges: TariffTimeRange[];
 
   constructor(config?: Partial<TariffConfig>) {
     this.config = {
@@ -93,6 +94,14 @@ export class TariffCalculator {
       timeRanges: config?.timeRanges ?? DEFAULT_TARIFF_CONFIG.timeRanges,
       tieredRates: config?.tieredRates ?? DEFAULT_TARIFF_CONFIG.tieredRates
     };
+
+    this.sortedTimeRanges = [...this.config.timeRanges].sort((a, b) => {
+      const aIsWrap = a.startHour >= 23 || a.startHour < 6;
+      const bIsWrap = b.startHour >= 23 || b.startHour < 6;
+      if (aIsWrap && !bIsWrap) return 1;
+      if (!aIsWrap && bIsWrap) return -1;
+      return a.startHour - b.startHour;
+    });
   }
 
   getTariffPeriod(timestamp: number): TariffPeriod {
@@ -101,7 +110,7 @@ export class TariffCalculator {
     const minute = date.getMinutes();
     const hourFraction = hour + minute / 60;
 
-    for (const range of this.config.timeRanges) {
+    for (const range of this.sortedTimeRanges) {
       if (range.startHour <= hourFraction && hourFraction < range.endHour) {
         return range.period;
       }
@@ -142,45 +151,127 @@ export class TariffCalculator {
     return (powerWatts * durationSeconds) / (1000 * 3600);
   }
 
-  processReading(reading: MeterReading): BillingRecord | null {
+  private getHourOfDay(timestamp: number): number {
+    const date = new Date(timestamp);
+    return date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
+  }
+
+  private findNextBoundaryTimestamp(timestamp: number): number {
+    const date = new Date(timestamp);
+    const currentHour = this.getHourOfDay(timestamp);
+
+    for (const range of this.sortedTimeRanges) {
+      if (range.startHour > currentHour) {
+        const boundaryDate = new Date(timestamp);
+        const startHour = Math.floor(range.startHour);
+        const startMinute = Math.round((range.startHour - startHour) * 60);
+        boundaryDate.setHours(startHour, startMinute, 0, 0);
+        return boundaryDate.getTime();
+      }
+
+      if (range.startHour <= currentHour && currentHour < range.endHour) {
+        const boundaryDate = new Date(timestamp);
+        const endHour = Math.floor(range.endHour);
+        const endMinute = Math.round((range.endHour - endHour) * 60);
+        boundaryDate.setHours(endHour, endMinute, 0, 0);
+        return boundaryDate.getTime();
+      }
+    }
+
+    const nextDay = new Date(timestamp);
+    nextDay.setHours(24, 0, 0, 0);
+    return nextDay.getTime();
+  }
+
+  private splitIntervalByBoundaries(
+    startTime: number,
+    endTime: number
+  ): Array<{ segmentStart: number; segmentEnd: number; period: TariffPeriod }> {
+    const segments: Array<{
+      segmentStart: number;
+      segmentEnd: number;
+      period: TariffPeriod;
+    }> = [];
+
+    let currentTime = startTime;
+
+    while (currentTime < endTime) {
+      const period = this.getTariffPeriod(currentTime);
+      let nextBoundary = this.findNextBoundaryTimestamp(currentTime);
+
+      if (nextBoundary <= currentTime) {
+        const nextDay = new Date(currentTime);
+        nextDay.setHours(24, 0, 0, 0);
+        nextBoundary = nextDay.getTime();
+      }
+
+      const segmentEnd = Math.min(nextBoundary, endTime);
+
+      segments.push({
+        segmentStart: currentTime,
+        segmentEnd,
+        period
+      });
+
+      currentTime = segmentEnd;
+    }
+
+    return segments;
+  }
+
+  processReading(reading: MeterReading): BillingRecord[] {
     if (this.lastTimestamp === 0) {
       this.lastTimestamp = reading.timestamp;
-      return null;
+      return [];
     }
 
     const durationSeconds = (reading.timestamp - this.lastTimestamp) / 1000;
 
     if (durationSeconds <= 0 || durationSeconds > 3600) {
       this.lastTimestamp = reading.timestamp;
-      return null;
+      return [];
     }
 
-    const energyKwh = this.wattsToKwh(reading.powerWatts, durationSeconds);
-    const period = this.getTariffPeriod(reading.timestamp);
-    const baseRate = this.getRateForPeriod(period);
-    const dateKey = this.getDateKey(reading.timestamp);
+    const segments = this.splitIntervalByBoundaries(
+      this.lastTimestamp,
+      reading.timestamp
+    );
 
-    const dailyTotalBefore = this.getDailyTotalKwh(dateKey);
-    const tier = this.determineTier(dailyTotalBefore);
-    const tierMultiplier = this.getTierMultiplier(tier);
-    const effectiveRate = baseRate * tierMultiplier;
-    const cost = energyKwh * effectiveRate;
+    const generatedRecords: BillingRecord[] = [];
 
-    const record: BillingRecord = {
-      timestamp: reading.timestamp,
-      powerWatts: reading.powerWatts,
-      energyKwh,
-      period,
-      rate: effectiveRate,
-      cost,
-      tier
-    };
+    for (const segment of segments) {
+      const segmentDurationSeconds = (segment.segmentEnd - segment.segmentStart) / 1000;
 
-    this.billingRecords.push(record);
-    this.updateDailyStats(dateKey, record);
+      if (segmentDurationSeconds <= 0) continue;
+
+      const energyKwh = this.wattsToKwh(reading.powerWatts, segmentDurationSeconds);
+      const dateKey = this.getDateKey(segment.segmentStart);
+
+      const dailyTotalBefore = this.getDailyTotalKwh(dateKey);
+      const tier = this.determineTier(dailyTotalBefore);
+      const tierMultiplier = this.getTierMultiplier(tier);
+      const baseRate = this.getRateForPeriod(segment.period);
+      const effectiveRate = baseRate * tierMultiplier;
+      const cost = energyKwh * effectiveRate;
+
+      const record: BillingRecord = {
+        timestamp: segment.segmentEnd,
+        powerWatts: reading.powerWatts,
+        energyKwh,
+        period: segment.period,
+        rate: effectiveRate,
+        cost,
+        tier
+      };
+
+      this.billingRecords.push(record);
+      this.updateDailyStats(dateKey, record);
+      generatedRecords.push(record);
+    }
+
     this.lastTimestamp = reading.timestamp;
 
-    return record;
+    return generatedRecords;
   }
 
   private updateDailyStats(dateKey: string, record: BillingRecord): void {
