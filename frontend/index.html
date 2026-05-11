@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医疗影像 3D 浏览器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        #container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        
+        #canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 280px;
+        }
+        
+        .controls h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #4fc3f7;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+        
+        .control-group input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        
+        .info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 12px;
+            color: #888;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-size: 18px;
+            color: #4fc3f7;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(79, 195, 247, 0.2);
+            border-top: 4px solid #4fc3f7;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        
+        <div id="loading">
+            <div class="spinner"></div>
+            <div>正在加载医疗影像数据...</div>
+        </div>
+        
+        <div class="controls" id="controls" style="display: none;">
+            <h2>医疗影像 3D 浏览器</h2>
+            
+            <div class="control-group">
+                <label>皮肤阈值: <span id="skinVal">0.3</span></label>
+                <input type="range" id="skinThreshold" min="0" max="1" step="0.01" value="0.3">
+            </div>
+            
+            <div class="control-group">
+                <label>骨骼阈值: <span id="boneVal">0.7</span></label>
+                <input type="range" id="boneThreshold" min="0" max="1" step="0.01" value="0.7">
+            </div>
+            
+            <div class="control-group">
+                <label>步进大小: <span id="stepVal">0.008</span></label>
+                <input type="range" id="stepSize" min="0.002" max="0.02" step="0.001" value="0.008">
+            </div>
+        </div>
+        
+        <div class="info">
+            <p>鼠标拖拽: 旋转视角</p>
+            <p>滚轮: 缩放</p>
+            <p>右键拖拽: 平移</p>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
