@@ -1,0 +1,4 @@
+com\dynamicform\controller\FormTemplateController.class
+com\dynamicform\DynamicFormApplication.class
+com\dynamicform\entity\FormTemplate.class
+com\dynamicform\repository\FormTemplateRepository.class
