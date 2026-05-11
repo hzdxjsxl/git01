@@ -1,0 +1,82 @@
+[gd_scene load_steps=4 format=3 uid="uid://main_scene"]
+
+[ext_resource type="Script" path="res://scripts/TestHandManager.gd" id="1_test"]
+[ext_resource type="Script" path="res://scripts/HandManager.gd" id="2_hand"]
+[ext_resource type="PackedScene" uid="uid://card_ui_scene" path="res://scenes/card_ui.tscn" id="3_cardprefab"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_test")
+
+[node name="Background" type="ColorRect" parent="."]
+offset_right = 1280.0
+offset_bottom = 720.0
+color = Color(0.15, 0.18, 0.25, 1)
+z_index = -100
+
+[node name="HandManager" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_hand")
+card_width = 100.0
+card_height = 140.0
+card_prefab = ExtResource("3_cardprefab")
+arc_radius = 350.0
+max_angle_deg = 80.0
+y_offset = 80.0
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="InfoLabel" type="Label" parent="UI"]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 200.0
+offset_bottom = 40.0
+text = "Cards in hand: 0 / 10"
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="HelpLabel" type="Label" parent="UI"]
+offset_left = 10.0
+offset_top = 50.0
+offset_right = 400.0
+offset_bottom = 90.0
+text = "A: Add card | S: Add 5 | D: Remove | R: Shuffle | C: Clear | Click card to remove"
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+
+[node name="AddCardBtn" type="Button" parent="UI"]
+offset_left = 10.0
+offset_top = 100.0
+offset_right = 110.0
+offset_bottom = 140.0
+text = "Add 1 (A)"
+
+[node name="Add5Btn" type="Button" parent="UI"]
+offset_left = 120.0
+offset_top = 100.0
+offset_right = 220.0
+offset_bottom = 140.0
+text = "Add 5 (S)"
+
+[node name="RemoveBtn" type="Button" parent="UI"]
+offset_left = 230.0
+offset_top = 100.0
+offset_right = 330.0
+offset_bottom = 140.0
+text = "Remove (D)"
+
+[node name="ShuffleBtn" type="Button" parent="UI"]
+offset_left = 340.0
+offset_top = 100.0
+offset_right = 440.0
+offset_bottom = 140.0
+text = "Shuffle (R)"
+
+[node name="ClearBtn" type="Button" parent="UI"]
+offset_left = 450.0
+offset_top = 100.0
+offset_right = 550.0
+offset_bottom = 140.0
+text = "Clear (C)"
