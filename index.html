@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高频交易订单簿深度图</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: #0d0d12;
+      color: #ecf0f1;
+      font-family: 'Consolas', 'Monaco', monospace;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      background-color: #1a1a24;
+      padding: 15px 25px;
+      border-bottom: 1px solid #2a2a38;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #ecf0f1;
+      letter-spacing: 1px;
+    }
+
+    h1 .highlight {
+      color: #3498db;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: #7f8c8d;
+      margin-left: 10px;
+    }
+
+    #stats {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .stat-item {
+      display: flex;
+      gap: 6px;
+      font-size: 12px;
+    }
+
+    .stat-label {
+      color: #7f8c8d;
+    }
+
+    .stat-value {
+      color: #ecf0f1;
+      font-weight: 600;
+    }
+
+    .stat-value.bid {
+      color: #2ecc71;
+    }
+
+    .stat-value.ask {
+      color: #e74c3c;
+    }
+
+    .stat-value.mid {
+      color: #f1c40f;
+    }
+
+    main {
+      flex: 1;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .canvas-container {
+      flex: 1;
+      position: relative;
+      background-color: #1e1e2e;
+      border-radius: 8px;
+      border: 1px solid #2a2a38;
+      overflow: hidden;
+    }
+
+    #depth-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .legend {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      display: flex;
+      gap: 20px;
+      font-size: 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+    }
+
+    .legend-dot.bid {
+      background-color: #2ecc71;
+    }
+
+    .legend-dot.ask {
+      background-color: #e74c3c;
+    }
+
+    .legend-text {
+      color: #7f8c8d;
+    }
+
+    footer {
+      background-color: #1a1a24;
+      padding: 10px 25px;
+      border-top: 1px solid #2a2a38;
+      font-size: 11px;
+      color: #7f8c8d;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background-color: #2ecc71;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    .note {
+      color: #95a5a6;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display: flex; align-items: center;">
+      <h1><span class="highlight">HFT</span> Order Book Depth Chart</h1>
+      <span class="subtitle">WebRTC DataChannel → Canvas API</span>
+    </div>
+    <div id="stats">
+      <div class="stat-item">
+        <span class="stat-label">FPS:</span>
+        <span class="stat-value">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Updates/s:</span>
+        <span class="stat-value">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Bid Levels:</span>
+        <span class="stat-value bid">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Ask Levels:</span>
+        <span class="stat-value ask">0</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="canvas-container">
+      <canvas id="depth-canvas"></canvas>
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot bid"></div>
+          <span class="legend-text">Bids (买盘)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot ask"></div>
+          <span class="legend-text">Asks (卖盘)</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="status">
+      <div class="status-dot"></div>
+      <span>模拟数据流式传输中...</span>
+    </div>
+    <div class="note">
+      ✅ OrderBookMerger: 高性能订单合并 | ✅ DepthCanvasRenderer: 纯数学路径绘制 | ✅ 60fps 动态渲染
+    </div>
+  </footer>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
