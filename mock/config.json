@@ -42,14 +42,14 @@
     "ambientColor": "#333344",
     "camera": {
       "type": "ArcRotateCamera",
-      "alpha": -Math.PI / 4,
-      "beta": Math.PI / 3,
+      "alpha": -0.7854,
+      "beta": 1.0472,
       "radius": 12,
       "target": [0, 1.5, 0],
       "lowerRadiusLimit": 5,
       "upperRadiusLimit": 30,
       "lowerBetaLimit": 0.1,
-      "upperBetaLimit": Math.PI / 2 - 0.1
+      "upperBetaLimit": 1.4708
     },
     "lighting": {
       "mainLight": {

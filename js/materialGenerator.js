@@ -22,16 +22,9 @@ class MaterialGenerator {
             environmentIntensity = 1.5,
             emissiveColor = null,
             emissiveIntensity = 0,
-            useMicroSurface = true,
             directIntensity = 1.0,
             useLogarithmicDepth = false
         } = config;
-
-        const cacheKey = `${color}_${roughness}_${metallic}`;
-        
-        if (this._materialCache.has(cacheKey)) {
-            return this._materialCache.get(cacheKey);
-        }
 
         const material = new BABYLON.PBRMetallicRoughnessMaterial(name, this.scene);
         
@@ -44,13 +37,15 @@ class MaterialGenerator {
         
         if (environmentTexture) {
             material.environmentTexture = environmentTexture;
+            material.reflectivityColor = new BABYLON.Color3(1, 1, 1);
+            material.reflectionColor = new BABYLON.Color3(1, 1, 1);
         }
         
-        if (useMicroSurface) {
-            material.useMicroSurfaceFromReflectivityMapAlpha = false;
-            material.useRoughnessFromMetallicTextureAlpha = true;
-            material.useMetallnessFromMetallicTextureBlue = false;
-        }
+        material.useMicroSurfaceFromReflectivityMapAlpha = false;
+        material.useRoughnessFromMetallicTextureAlpha = false;
+        material.useMetallnessFromMetallicTextureBlue = false;
+        
+        material.twoSidedLighting = true;
         
         if (emissiveColor) {
             material.emissiveColor = this.hexToColor3(emissiveColor);
@@ -61,9 +56,13 @@ class MaterialGenerator {
             material.backFaceCulling = false;
         }
         
-        material.twoSidedLighting = true;
-        
-        this._materialCache.set(cacheKey, material);
+        if (metallic > 0.5) {
+            material.indexOfRefraction = 1.5;
+            material.metallicF0Factor = 1.0;
+        } else {
+            material.indexOfRefraction = 1.5;
+            material.metallicF0Factor = 0.04;
+        }
         
         return material;
     }
@@ -136,6 +135,9 @@ class MaterialGenerator {
                 material.reflectionTexture = config.environmentTexture;
             }
         }
+        
+        material.markAsDirty(BABYLON.Material.TextureDirtyFlag);
+        material.markAsDirty(BABYLON.Material.MiscDirtyFlag);
     }
 
     createPresetMaterial(presetName, presets, environmentTexture = null) {

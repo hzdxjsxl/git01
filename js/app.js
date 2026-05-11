@@ -19,6 +19,7 @@ class App {
         await this._loadConfig();
         await this._createScene();
         await this._createDemoWheels();
+        this._createReflectionObjects();
         await this._setupWheelCustomizer();
         this._setupUI();
         this._hideLoading();
@@ -221,10 +222,10 @@ class App {
 
     async _createDemoWheels() {
         const wheelPositions = [
-            { x: -2.5, y: 0.5, z: 1.5 },
-            { x: 2.5, y: 0.5, z: 1.5 },
-            { x: -2.5, y: 0.5, z: -1.5 },
-            { x: 2.5, y: 0.5, z: -1.5 }
+            { x: -2.5, y: 0.8, z: 2.0 },
+            { x: 2.5, y: 0.8, z: 2.0 },
+            { x: -2.5, y: 0.8, z: -2.0 },
+            { x: 2.5, y: 0.8, z: -2.0 }
         ];
         
         wheelPositions.forEach((pos, index) => {
@@ -249,6 +250,7 @@ class App {
         wheelMaterial.baseColor = new BABYLON.Color3(0.75, 0.75, 0.75);
         wheelMaterial.roughness = 0.2;
         wheelMaterial.metallic = 1.0;
+        wheelMaterial.environmentIntensity = 1.5;
         
         rim.material = wheelMaterial;
         spokes.material = wheelMaterial;
@@ -263,56 +265,33 @@ class App {
     }
 
     _createWheelRim(name, position) {
-        const rimOptions = {
-            diameterTop: 0.35,
-            diameterBottom: 0.35,
-            height: 0.22,
-            tessellation: 48,
-            sideOrientation: BABYLON.Mesh.DOUBLESIDE
-        };
-        const rim = BABYLON.MeshBuilder.CreateCylinder(name, rimOptions, this.scene);
-        rim.position = new BABYLON.Vector3(0, 0, 0);
-        rim.rotation.z = Math.PI / 2;
+        const rimOuter = BABYLON.MeshBuilder.CreateTorus(`${name}_outer`, {
+            diameter: 0.7,
+            thickness: 0.1,
+            tessellation: 48
+        }, this.scene);
+        rimOuter.rotation.x = Math.PI / 2;
         
-        const innerRimOptions = {
-            diameter: 0.15,
-            height: 0.22,
-            tessellation: 32
-        };
-        const innerRim = BABYLON.MeshBuilder.CreateCylinder(`${name}_inner`, innerRimOptions, this.scene);
-        innerRim.rotation.z = Math.PI / 2;
+        const rimInner = BABYLON.MeshBuilder.CreateTorus(`${name}_inner`, {
+            diameter: 0.4,
+            thickness: 0.12,
+            tessellation: 48
+        }, this.scene);
+        rimInner.rotation.x = Math.PI / 2;
         
-        const rimCSG = BABYLON.CSG.FromMesh(rim);
-        const innerRimCSG = BABYLON.CSG.FromMesh(innerRim);
-        const finalRimCSG = rimCSG.subtract(innerRimCSG);
+        const rim = BABYLON.Mesh.MergeMeshes([rimOuter, rimInner], true);
+        rim.name = name;
         
-        innerRim.dispose();
-        rim.dispose();
-        
-        const finalRim = finalRimCSG.toMesh(name, null, this.scene);
-        finalRim.position = new BABYLON.Vector3(0, 0, 0);
-        
-        return finalRim;
+        return rim;
     }
 
     _createTire(name, position) {
-        const tireOptions = {
-            diameterTop: 0.4,
-            diameterBottom: 0.4,
-            height: 0.24,
-            tessellation: 48,
-            sideOrientation: BABYLON.Mesh.DOUBLESIDE
-        };
-        
-        const tire = BABYLON.MeshBuilder.CreateTorusKnot(name, {
-            radius: 0.18,
-            tube: 0.03,
-            radialSegments: 128,
-            tubularSegments: 64
+        const tire = BABYLON.MeshBuilder.CreateTorus(name, {
+            diameter: 0.85,
+            thickness: 0.18,
+            tessellation: 64
         }, this.scene);
-        
-        tire.rotation.z = Math.PI / 2;
-        tire.scaling = new BABYLON.Vector3(1, 1.2, 0.55);
+        tire.rotation.x = Math.PI / 2;
         
         return tire;
     }
@@ -320,35 +299,82 @@ class App {
     _createSpokes(name, position) {
         const spokeGroup = new BABYLON.Mesh(name, this.scene);
         
-        const numSpokes = 10;
+        const numSpokes = 12;
         
         for (let i = 0; i < numSpokes; i++) {
             const angle = (i / numSpokes) * Math.PI * 2;
             
-            const spoke = BABYLON.MeshBuilder.CreateBox(`${name}_spoke_${i}`, {
-                height: 0.25,
-                width: 0.015,
-                depth: 0.1
+            const spoke = BABYLON.MeshBuilder.CreateCylinder(`${name}_spoke_${i}`, {
+                height: 0.55,
+                diameterTop: 0.015,
+                diameterBottom: 0.025,
+                tessellation: 6
             }, this.scene);
             
-            spoke.position.x = Math.cos(angle) * 0.125;
-            spoke.position.y = Math.sin(angle) * 0.125;
+            spoke.position.x = Math.cos(angle) * 0.275;
+            spoke.position.y = Math.sin(angle) * 0.275;
             spoke.rotation.z = angle + Math.PI / 2;
             
             spoke.parent = spokeGroup;
         }
         
         const centerHub = BABYLON.MeshBuilder.CreateCylinder(`${name}_hub`, {
-            diameter: 0.08,
-            height: 0.18,
+            diameter: 0.15,
+            height: 0.2,
             tessellation: 24
         }, this.scene);
-        centerHub.rotation.z = Math.PI / 2;
+        centerHub.rotation.x = Math.PI / 2;
         centerHub.parent = spokeGroup;
         
         spokeGroup.position = new BABYLON.Vector3(0, 0, 0);
         
         return spokeGroup;
+    }
+
+    _createReflectionObjects() {
+        const box1 = BABYLON.MeshBuilder.CreateBox('reflectionBox1', {
+            width: 0.8,
+            height: 1.5,
+            depth: 0.8
+        }, this.scene);
+        box1.position = new BABYLON.Vector3(-4, 0.75, 0);
+        const box1Mat = new BABYLON.StandardMaterial('box1Mat', this.scene);
+        box1Mat.diffuseColor = new BABYLON.Color3(0.9, 0.2, 0.2);
+        box1Mat.emissiveColor = new BABYLON.Color3(0.3, 0.05, 0.05);
+        box1.material = box1Mat;
+        
+        const box2 = BABYLON.MeshBuilder.CreateBox('reflectionBox2', {
+            width: 0.6,
+            height: 1.2,
+            depth: 0.6
+        }, this.scene);
+        box2.position = new BABYLON.Vector3(4, 0.6, 0);
+        const box2Mat = new BABYLON.StandardMaterial('box2Mat', this.scene);
+        box2Mat.diffuseColor = new BABYLON.Color3(0.2, 0.5, 0.9);
+        box2Mat.emissiveColor = new BABYLON.Color3(0.05, 0.15, 0.3);
+        box2.material = box2Mat;
+        
+        const sphere1 = BABYLON.MeshBuilder.CreateSphere('reflectionSphere1', {
+            diameter: 0.8,
+            segments: 32
+        }, this.scene);
+        sphere1.position = new BABYLON.Vector3(0, 0.5, 3.5);
+        const sphere1Mat = new BABYLON.StandardMaterial('sphere1Mat', this.scene);
+        sphere1Mat.diffuseColor = new BABYLON.Color3(0.2, 0.9, 0.3);
+        sphere1Mat.emissiveColor = new BABYLON.Color3(0.05, 0.3, 0.1);
+        sphere1.material = sphere1Mat;
+        
+        const sphere2 = BABYLON.MeshBuilder.CreateSphere('reflectionSphere2', {
+            diameter: 0.6,
+            segments: 32
+        }, this.scene);
+        sphere2.position = new BABYLON.Vector3(0, 0.4, -3.5);
+        const sphere2Mat = new BABYLON.StandardMaterial('sphere2Mat', this.scene);
+        sphere2Mat.diffuseColor = new BABYLON.Color3(0.9, 0.7, 0.2);
+        sphere2Mat.emissiveColor = new BABYLON.Color3(0.3, 0.2, 0.05);
+        sphere2.material = sphere2Mat;
+        
+        console.log('Reflection objects created for PBR testing');
     }
 
     async _setupWheelCustomizer() {

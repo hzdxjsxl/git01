@@ -6,6 +6,7 @@ class WheelCustomizer {
         this.environmentHelper = null;
         this.reflectionProbe = null;
         this.wheelMeshes = [];
+        this.wheelChildMeshes = [];
         this.materialGenerator = null;
         this.currentConfig = {
             color: '#c0c0c0',
@@ -13,6 +14,8 @@ class WheelCustomizer {
             metallic: 1.0,
             environmentIntensity: 1.5
         };
+        this._currentMaterial = null;
+        this._probeInitialized = false;
         
         this._onConfigChangeCallbacks = [];
     }
@@ -21,6 +24,8 @@ class WheelCustomizer {
         this.materialGenerator = new MaterialGenerator(this.scene);
         await this._setupEnvironment();
         this._findWheelMeshes();
+        this._setupReflectionProbe();
+        this._refreshProbe();
         this._applyDefaultConfig();
     }
 
@@ -45,7 +50,7 @@ class WheelCustomizer {
         }
         
         if (this.environmentHelper && this.environmentHelper.ground) {
-            if (envConfig.ground?.reflectionTexture) {
+            if (envConfig.ground?.reflectionTexture !== false) {
                 const mirrorTexture = new BABYLON.MirrorTexture(
                     'mirror',
                     envConfig.ground?.mirrorTextureSize || 1024,
@@ -58,23 +63,12 @@ class WheelCustomizer {
                 groundMaterial.diffuseColor = new BABYLON.Color3(0.05, 0.05, 0.08);
                 groundMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
                 groundMaterial.reflectionTexture = mirrorTexture;
-                groundMaterial.reflectionTexture.level = 0.4;
+                groundMaterial.reflectionTexture.level = 0.3;
                 groundMaterial.alpha = envConfig.ground?.opacity || 0.8;
                 
                 this.environmentHelper.ground.material = groundMaterial;
                 this._groundMirrorTexture = mirrorTexture;
             }
-        }
-        
-        const probeSize = envConfig.reflectionProbe?.size || 512;
-        this.reflectionProbe = new BABYLON.ReflectionProbe('wheelReflectionProbe', probeSize, this.scene);
-        
-        if (this.environmentHelper && this.environmentHelper.skybox) {
-            this.reflectionProbe.renderList.push(this.environmentHelper.skybox);
-        }
-        
-        if (this._groundMirrorTexture) {
-            this._groundMirrorTexture.renderList = [];
         }
         
         return this.environmentHelper;
@@ -85,22 +79,68 @@ class WheelCustomizer {
         const pattern = wheelConfig.meshNamePattern || 'Wheel';
         
         this.wheelMeshes = [];
+        this.wheelChildMeshes = [];
         
         this.scene.meshes.forEach((mesh) => {
             if (this._matchesPattern(mesh.name, pattern)) {
                 this.wheelMeshes.push(mesh);
-                if (this.reflectionProbe) {
-                    this.reflectionProbe.renderList.push(mesh);
-                }
+                
+                const descendants = mesh.getChildMeshes ? mesh.getChildMeshes(true) : [];
+                descendants.forEach((descendant) => {
+                    if (!this.wheelChildMeshes.includes(descendant)) {
+                        this.wheelChildMeshes.push(descendant);
+                    }
+                });
             }
         });
         
-        console.log(`Found ${this.wheelMeshes.length} wheel meshes matching pattern '${pattern}'`);
+        console.log(`Found ${this.wheelMeshes.length} wheel mesh groups (total ${this.wheelMeshes.length + this.wheelChildMeshes.length} meshes) matching pattern '${pattern}'`);
         return this.wheelMeshes;
     }
 
     _matchesPattern(meshName, pattern) {
         return meshName.toLowerCase().includes(pattern.toLowerCase());
+    }
+
+    _setupReflectionProbe() {
+        const sceneConfig = this.config.sceneConfig || {};
+        const envConfig = sceneConfig.environment || {};
+        const probeSize = envConfig.reflectionProbe?.size || 512;
+        
+        this.reflectionProbe = new BABYLON.ReflectionProbe('wheelReflectionProbe', probeSize, this.scene);
+        
+        this.scene.meshes.forEach((mesh) => {
+            if (mesh !== this.environmentHelper?.ground) {
+                this.reflectionProbe.renderList.push(mesh);
+            }
+        });
+        
+        if (this.environmentHelper && this.environmentHelper.skybox) {
+            this.reflectionProbe.renderList.push(this.environmentHelper.skybox);
+        }
+        
+        this.reflectionProbe.refreshRate = 0;
+        this._probeInitialized = true;
+        
+        console.log('ReflectionProbe setup complete, renderList count:', this.reflectionProbe.renderList.length);
+    }
+
+    async _refreshProbe() {
+        if (!this.reflectionProbe) {
+            return;
+        }
+        
+        this.reflectionProbe.refreshRate = 1;
+        
+        this.scene.onBeforeRenderObservable.addOnce(() => {
+            if (this.reflectionProbe) {
+                this.reflectionProbe.refreshRate = 0;
+                console.log('ReflectionProbe refresh set to static');
+            }
+        });
+        
+        console.log('ReflectionProbe refresh triggered');
+        return Promise.resolve();
     }
 
     _applyDefaultConfig() {
@@ -120,7 +160,7 @@ class WheelCustomizer {
         const mergedConfig = { ...this.currentConfig, ...config };
         this.currentConfig = mergedConfig;
         
-        const material = this.materialGenerator.createPBRMaterial({
+        this._currentMaterial = this.materialGenerator.createPBRMaterial({
             color: mergedConfig.color,
             roughness: mergedConfig.roughness,
             metallic: mergedConfig.metallic,
@@ -129,8 +169,7 @@ class WheelCustomizer {
             name: 'wheelMaterial'
         });
         
-        this._applyMaterialToWheels(material);
-        this._updateEnvironmentIntensity(mergedConfig.environmentIntensity);
+        this._applyMaterialToWheels(this._currentMaterial);
         
         this._notifyConfigChange(mergedConfig);
         
@@ -139,41 +178,58 @@ class WheelCustomizer {
 
     _applyMaterialToWheels(material) {
         this.wheelMeshes.forEach((mesh) => {
-            mesh.material = material;
-            
-            if (mesh.getChildren) {
-                mesh.getChildren().forEach((child) => {
-                    if (child.material) {
-                        this.materialGenerator.updateMaterialProperties(child.material, {
-                            environmentIntensity: this.currentConfig.environmentIntensity,
-                            environmentTexture: this._getEnvironmentTexture()
-                        });
-                    }
-                });
+            if (mesh.name.toLowerCase().includes('rim') || 
+                mesh.name.toLowerCase().includes('spoke') ||
+                mesh.name.toLowerCase().includes('hub') ||
+                !mesh.name.toLowerCase().includes('tire')) {
+                mesh.material = material;
             }
+        });
+        
+        this.wheelChildMeshes.forEach((mesh) => {
+            if (mesh.name.toLowerCase().includes('tire')) {
+                return;
+            }
+            mesh.material = material;
         });
     }
 
     _getEnvironmentTexture() {
-        if (this.reflectionProbe) {
+        if (this.reflectionProbe && this.reflectionProbe.cubeTexture) {
             return this.reflectionProbe.cubeTexture;
         }
         if (this.environmentHelper && this.environmentHelper.skyboxTexture) {
             return this.environmentHelper.skyboxTexture;
         }
+        if (this.scene.environmentTexture) {
+            return this.scene.environmentTexture;
+        }
         return null;
     }
 
-    _updateEnvironmentIntensity(intensity) {
+    updateEnvironmentIntensity(intensity) {
+        const floatIntensity = parseFloat(intensity);
+        this.currentConfig.environmentIntensity = floatIntensity;
+        
+        if (this._currentMaterial) {
+            this._currentMaterial.environmentIntensity = floatIntensity;
+            this.materialGenerator.updateMaterialProperties(this._currentMaterial, {
+                environmentIntensity: floatIntensity
+            });
+        }
+        
         this.wheelMeshes.forEach((mesh) => {
-            if (mesh.material) {
-                mesh.material.environmentIntensity = intensity;
+            if (mesh.material && mesh.material !== this._currentMaterial) {
+                mesh.material.environmentIntensity = floatIntensity;
             }
         });
         
         if (this._groundMirrorTexture && this._groundMirrorTexture.level !== undefined) {
-            this._groundMirrorTexture.level = Math.min(intensity * 0.25, 0.6);
+            this._groundMirrorTexture.level = Math.min(floatIntensity * 0.2, 0.5);
         }
+        
+        this._notifyConfigChange(this.currentConfig);
+        return this.currentConfig;
     }
 
     applyPreset(presetName) {
@@ -186,14 +242,16 @@ class WheelCustomizer {
             return null;
         }
         
-        return this.applyConfig({
+        const config = {
             color: preset.color,
             roughness: preset.roughness,
             metallic: preset.metallic !== undefined ? preset.metallic : 1.0,
             environmentIntensity: preset.environmentIntensity !== undefined 
                 ? preset.environmentIntensity 
                 : this.currentConfig.environmentIntensity
-        });
+        };
+        
+        return this.applyConfig(config);
     }
 
     updateColor(color) {
@@ -202,10 +260,6 @@ class WheelCustomizer {
 
     updateRoughness(roughness) {
         return this.applyConfig({ roughness: parseFloat(roughness) });
-    }
-
-    updateEnvironmentIntensity(intensity) {
-        return this.applyConfig({ environmentIntensity: parseFloat(intensity) });
     }
 
     addMeshToReflectionProbe(mesh) {
@@ -222,10 +276,18 @@ class WheelCustomizer {
         if (this.environmentHelper && this.environmentHelper.skybox) {
             this.reflectionProbe.renderList.push(this.environmentHelper.skybox);
         }
+        if (this.environmentHelper && this.environmentHelper.ground) {
+            this.reflectionProbe.renderList.push(this.environmentHelper.ground);
+        }
         
         this.wheelMeshes.forEach((mesh) => {
             this.reflectionProbe.renderList.push(mesh);
         });
+        this.wheelChildMeshes.forEach((mesh) => {
+            this.reflectionProbe.renderList.push(mesh);
+        });
+        
+        this._refreshProbe();
     }
 
     onConfigChange(callback) {
@@ -259,8 +321,12 @@ class WheelCustomizer {
         if (this.reflectionProbe) {
             this.reflectionProbe.dispose();
         }
+        if (this._groundMirrorTexture) {
+            this._groundMirrorTexture.dispose();
+        }
         this._onConfigChangeCallbacks = [];
         this.wheelMeshes = [];
+        this.wheelChildMeshes = [];
     }
 }
 
