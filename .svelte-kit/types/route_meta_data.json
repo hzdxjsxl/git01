@@ -1,0 +1,6 @@
+{
+	"/": [],
+	"/api/meter/stream": [
+		"src/routes/api/meter/stream/+server.ts"
+	]
+}
