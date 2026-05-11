@@ -56,9 +56,7 @@ class Scheduler {
 
   public addTrack(config: TrackConfig): void {
     this.tracks.set(config.id, config);
-    this.audioManager.createTrack(config.id);
-    this.audioManager.setTrackVolume(config.id, config.volume);
-    this.audioManager.setTrackMuted(config.id, config.muted);
+    this.audioManager.registerTrack(config.id, config.volume, config.muted);
   }
 
   public updateTrack(trackId: string, updates: Partial<TrackConfig>): void {

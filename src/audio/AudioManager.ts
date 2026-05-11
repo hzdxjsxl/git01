@@ -17,12 +17,19 @@ export interface TrackConfig {
   muted: boolean;
 }
 
+interface PendingTrackConfig {
+  volume: number;
+  muted: boolean;
+}
+
 class AudioManager {
   private static instance: AudioManager;
   private audioContext: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private tracks: Map<string, GainNode> = new Map();
   private scheduledNodes: Map<string, { oscillator: OscillatorNode; gain: GainNode }[]> = new Map();
+  private pendingTracks: Map<string, PendingTrackConfig> = new Map();
+  private isInitialized: boolean = false;
 
   public static getInstance(): AudioManager {
     if (!AudioManager.instance) {
@@ -36,7 +43,9 @@ class AudioManager {
       if (this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
       }
-      return;
+      if (this.isInitialized) {
+        return;
+      }
     }
 
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -44,6 +53,17 @@ class AudioManager {
     this.masterGain = this.audioContext.createGain();
     this.masterGain.gain.value = 0.8;
     this.masterGain.connect(this.audioContext.destination);
+
+    this.isInitialized = true;
+
+    this.pendingTracks.forEach((config, trackId) => {
+      this.createTrackReal(trackId, config.volume, config.muted);
+    });
+    this.pendingTracks.clear();
+  }
+
+  public getIsInitialized(): boolean {
+    return this.isInitialized;
   }
 
   public getContext(): AudioContext {
@@ -60,9 +80,9 @@ class AudioManager {
     return this.audioContext.currentTime;
   }
 
-  public createTrack(trackId: string): GainNode {
+  private createTrackReal(trackId: string, volume: number, muted: boolean): GainNode {
     if (!this.audioContext || !this.masterGain) {
-      throw new Error('AudioContext not initialized. Call init() first.');
+      throw new Error('AudioContext not initialized.');
     }
 
     if (this.tracks.has(trackId)) {
@@ -70,7 +90,7 @@ class AudioManager {
     }
 
     const trackGain = this.audioContext.createGain();
-    trackGain.gain.value = 1.0;
+    trackGain.gain.value = muted ? 0 : volume;
     trackGain.connect(this.masterGain);
     this.tracks.set(trackId, trackGain);
     this.scheduledNodes.set(trackId, []);
@@ -78,17 +98,49 @@ class AudioManager {
     return trackGain;
   }
 
+  public registerTrack(trackId: string, volume: number = 1.0, muted: boolean = false): void {
+    if (this.isInitialized) {
+      this.createTrackReal(trackId, volume, muted);
+    } else {
+      this.pendingTracks.set(trackId, { volume, muted });
+    }
+  }
+
+  public createTrack(trackId: string): GainNode | null {
+    if (!this.isInitialized) {
+      this.registerTrack(trackId);
+      return null;
+    }
+    return this.createTrackReal(trackId, 1.0, false);
+  }
+
   public setTrackVolume(trackId: string, volume: number): void {
+    const normalized = Math.max(0, Math.min(1, volume));
+
     const trackGain = this.tracks.get(trackId);
     if (trackGain) {
-      trackGain.gain.value = Math.max(0, Math.min(1, volume));
+      trackGain.gain.value = normalized;
+      return;
+    }
+
+    const pending = this.pendingTracks.get(trackId);
+    if (pending) {
+      pending.volume = normalized;
     }
   }
 
   public setTrackMuted(trackId: string, muted: boolean): void {
     const trackGain = this.tracks.get(trackId);
     if (trackGain) {
-      trackGain.gain.value = muted ? 0 : 1;
+      const pending = this.pendingTracks.get(trackId);
+      const volume = pending ? pending.volume : 1.0;
+      trackGain.gain.value = muted ? 0 : volume;
+      return;
+    }
+
+    const pending = this.pendingTracks.get(trackId);
+    if (pending) {
+      pending.muted = muted;
     }
   }
 
@@ -100,13 +152,14 @@ class AudioManager {
     oscillatorType: OscillatorType = 'sine',
     velocity: number = 0.7
   ): void {
-    if (!this.audioContext) {
+    if (!this.audioContext || !this.masterGain) {
       throw new Error('AudioContext not initialized. Call init() first.');
     }
 
-    const trackGain = this.tracks.get(trackId);
+    let trackGain = this.tracks.get(trackId);
     if (!trackGain) {
-      this.createTrack(trackId);
+      this.createTrackReal(trackId, 1.0, false);
+      trackGain = this.tracks.get(trackId)!;
     }
 
     const oscillator = this.audioContext.createOscillator();
