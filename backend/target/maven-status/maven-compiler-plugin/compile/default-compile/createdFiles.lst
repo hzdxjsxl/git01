@@ -1,0 +1,5 @@
+com\cluster\dashboard\handler\ClusterMetricsHandler.class
+com\cluster\dashboard\model\NodeMetrics.class
+com\cluster\dashboard\config\WebSocketConfig.class
+com\cluster\dashboard\ClusterDashboardApplication.class
+com\cluster\dashboard\config\CorsConfig.class
