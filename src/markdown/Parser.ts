@@ -21,6 +21,267 @@ export interface MarkdownNode {
   children?: MarkdownNode[];
 }
 
+class InlineParser {
+  private source: string;
+  private pos: number;
+
+  constructor(source: string) {
+    this.source = source;
+    this.pos = 0;
+  }
+
+  parse(): MarkdownNode[] {
+    return this.parseInline();
+  }
+
+  private eof(): boolean {
+    return this.pos >= this.source.length;
+  }
+
+  private peek(offset: number = 0): string {
+    return this.source[this.pos + offset] || '';
+  }
+
+  private advance(n: number = 1): void {
+    this.pos += n;
+  }
+
+
+
+  private parseInline(): MarkdownNode[] {
+    const nodes: MarkdownNode[] = [];
+
+    while (!this.eof()) {
+      const node = this.parseAny();
+      if (node) {
+        nodes.push(node);
+      }
+    }
+
+    return nodes;
+  }
+
+  private parseAny(): MarkdownNode | null {
+    return (
+      this.parseLineBreak() ||
+      this.parseCode() ||
+      this.parseLink() ||
+      this.parseBold() ||
+      this.parseItalic() ||
+      this.parseText()
+    );
+  }
+
+  private parseLineBreak(): MarkdownNode | null {
+    if (this.peek() === '\n') {
+      this.advance();
+      return { type: 'lineBreak' };
+    }
+    return null;
+  }
+
+  private parseCode(): MarkdownNode | null {
+    if (this.peek() !== '`') {
+      return null;
+    }
+
+    const startPos = this.pos;
+    this.advance();
+
+    while (!this.eof() && this.peek() !== '`') {
+      this.advance();
+    }
+
+    if (this.eof()) {
+      this.pos = startPos;
+      return null;
+    }
+
+    this.advance();
+
+    const value = this.source.slice(startPos + 1, this.pos - 1);
+    return { type: 'code', value };
+  }
+
+  private parseLink(): MarkdownNode | null {
+    if (this.peek() !== '[') {
+      return null;
+    }
+
+    const startPos = this.pos;
+    this.advance();
+
+    let linkText = '';
+    while (!this.eof() && this.peek() !== ']') {
+      linkText += this.peek();
+      this.advance();
+    }
+
+    if (this.eof() || this.peek() !== ']') {
+      this.pos = startPos;
+      return null;
+    }
+
+    this.advance();
+
+    if (this.peek() !== '(') {
+      this.pos = startPos;
+      return null;
+    }
+
+    this.advance();
+
+    let url = '';
+    while (!this.eof() && this.peek() !== ')') {
+      url += this.peek();
+      this.advance();
+    }
+
+    if (this.eof()) {
+      this.pos = startPos;
+      return null;
+    }
+
+    this.advance();
+
+    const children = new InlineParser(linkText).parse();
+    return {
+      type: 'link',
+      url: url.trim(),
+      children
+    };
+  }
+
+  private parseBold(): MarkdownNode | null {
+    const delimiter = this.peek() + this.peek(1);
+    if (delimiter !== '**' && delimiter !== '__') {
+      return null;
+    }
+
+    const startPos = this.pos;
+    this.advance(2);
+
+    const contentEnd = this.findMatchingDelimiter(delimiter, false);
+
+    if (contentEnd === -1) {
+      this.pos = startPos;
+      return null;
+    }
+
+    const content = this.source.slice(this.pos, contentEnd);
+    this.pos = contentEnd + delimiter.length;
+
+    const children = new InlineParser(content).parse();
+    return { type: 'bold', children };
+  }
+
+  private parseItalic(): MarkdownNode | null {
+    const char = this.peek();
+    if (char !== '*' && char !== '_') {
+      return null;
+    }
+
+    const startPos = this.pos;
+    this.advance();
+
+    const contentEnd = this.findMatchingDelimiter(char, true);
+
+    if (contentEnd === -1) {
+      this.pos = startPos;
+      return null;
+    }
+
+    const content = this.source.slice(this.pos, contentEnd);
+    this.pos = contentEnd + char.length;
+
+    const children = new InlineParser(content).parse();
+    return { type: 'italic', children };
+  }
+
+  private findMatchingDelimiter(
+    delimiter: string,
+    isItalic: boolean
+  ): number {
+    let depth = 1;
+    let i = this.pos;
+
+    while (i < this.source.length) {
+      const char = this.source[i];
+      const nextChar = this.source[i + 1] || '';
+
+      if (!isItalic) {
+        const current = char + nextChar;
+        if (current === delimiter) {
+          depth--;
+          if (depth === 0) {
+            return i;
+          }
+          i += 2;
+          continue;
+        } else if ((current === '**' && delimiter === '__') || (current === '__' && delimiter === '**')) {
+          depth++;
+          i += 2;
+          continue;
+        }
+      }
+
+      if (isItalic && char === delimiter) {
+        if (nextChar !== delimiter) {
+          depth--;
+          if (depth === 0) {
+            return i;
+          }
+        }
+      }
+
+      if (char === '`') {
+        i++;
+        while (i < this.source.length && this.source[i] !== '`') {
+          i++;
+        }
+        if (i < this.source.length) {
+          i++;
+        }
+        continue;
+      }
+
+      if (char === '[') {
+        i++;
+        while (i < this.source.length && this.source[i] !== ']') {
+          i++;
+        }
+        if (i < this.source.length) {
+          i++;
+        }
+        continue;
+      }
+
+      i++;
+    }
+
+    return -1;
+  }
+
+  private parseText(): MarkdownNode | null {
+    const startPos = this.pos;
+    const delimiters = ['*', '_', '`', '[', '\n'];
+
+    while (!this.eof() && !delimiters.includes(this.peek())) {
+      this.advance();
+    }
+
+    if (this.pos === startPos) {
+      if (this.peek() === '*' || this.peek() === '_') {
+        this.advance();
+        return { type: 'text', value: this.source[startPos] };
+      }
+      return null;
+    }
+
+    return { type: 'text', value: this.source.slice(startPos, this.pos) };
+  }
+}
+
 export class Parser {
   parse(source: string): MarkdownNode {
     const lines = source.split('\n');
@@ -40,7 +301,7 @@ export class Parser {
         children.push({
           type: 'heading',
           level: headingMatch[1].length,
-          children: this.parseInline(headingMatch[2])
+          children: new InlineParser(headingMatch[2]).parse()
         });
         i++;
         continue;
@@ -67,7 +328,7 @@ export class Parser {
           const itemContent = lines[i].replace(/^\d+\.\s+/, '');
           listItems.push({
             type: 'listItem',
-            children: this.parseInline(itemContent)
+            children: new InlineParser(itemContent).parse()
           });
           i++;
         }
@@ -86,7 +347,7 @@ export class Parser {
           const itemContent = lines[i].replace(/^[-*]\s+/, '');
           listItems.push({
             type: 'listItem',
-            children: this.parseInline(itemContent)
+            children: new InlineParser(itemContent).parse()
           });
           i++;
         }
@@ -105,71 +366,10 @@ export class Parser {
       }
       children.push({
         type: 'paragraph',
-        children: this.parseInline(paragraphLines.join('\n'))
+        children: new InlineParser(paragraphLines.join('\n')).parse()
       });
     }
 
     return { type: 'root', children };
-  }
-
-  private parseInline(text: string): MarkdownNode[] {
-    const nodes: MarkdownNode[] = [];
-    let remaining = text;
-
-    const patterns: { regex: RegExp; handler: (match: RegExpMatchArray) => MarkdownNode }[] = [
-      {
-        regex: /^(\*\*|__)(.+?)\1/,
-        handler: (m) => ({ type: 'bold', children: this.parseInline(m[2]) })
-      },
-      {
-        regex: /^(\*|_)(.+?)\1/,
-        handler: (m) => ({ type: 'italic', children: this.parseInline(m[2]) })
-      },
-      {
-        regex: /^`([^`]+)`/,
-        handler: (m) => ({ type: 'code', value: m[1] })
-      },
-      {
-        regex: /^\[([^\]]+)\]\(([^)]+)\)/,
-        handler: (m) => ({
-          type: 'link',
-          value: m[1],
-          url: m[2],
-          children: [{ type: 'text', value: m[1] }]
-        })
-      },
-      {
-        regex: /^\n/,
-        handler: () => ({ type: 'lineBreak' })
-      }
-    ];
-
-    while (remaining.length > 0) {
-      let matched = false;
-
-      for (const { regex, handler } of patterns) {
-        const match = remaining.match(regex);
-        if (match) {
-          nodes.push(handler(match));
-          remaining = remaining.slice(match[0].length);
-          matched = true;
-          break;
-        }
-      }
-
-      if (!matched) {
-        let textEnd = remaining.length;
-        for (const { regex } of patterns) {
-          const match = remaining.match(regex);
-          if (match && (match.index ?? remaining.length) < textEnd) {
-            textEnd = match.index ?? remaining.length;
-          }
-        }
-        nodes.push({ type: 'text', value: remaining.slice(0, textEnd) });
-        remaining = remaining.slice(textEnd);
-      }
-    }
-
-    return nodes;
   }
 }
