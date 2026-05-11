@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted, markRaw } from 'vue'
 import ScatterPlot from './ScatterPlot.vue'
-import { parseLogLines, calculateStatistics, getStatusCodeColor } from '../utils/logParser'
+import { processLogData, getStatusCodeColor } from '../utils/logParser'
 import type { ParsedLogEntry, LogStatistics } from '../utils/logParser'
 
 interface LogFile {
@@ -17,25 +17,30 @@ interface LogContent {
 
 const logFiles = ref<LogFile[]>([])
 const selectedFile = ref<string>('')
-const rawLines = ref<string[]>([])
 const isLoading = ref(false)
 const error = ref<string>('')
 const refreshInterval = ref<number | null>(null)
 const autoRefresh = ref(false)
 const lineLimit = ref<number | null>(null)
 
-const parsedEntries = computed<ParsedLogEntry[]>(() => {
-  return parseLogLines(rawLines.value)
+// 非响应式变量，避免Vue深度追踪大数据
+
+const statistics = ref<LogStatistics>({
+  totalRequests: 0,
+  validRequests: 0,
+  p99Latency: 0,
+  p95Latency: 0,
+  p50Latency: 0,
+  avgLatency: 0,
+  maxLatency: 0,
+  minLatency: 0,
+  statusCodeDistribution: {},
+  topIPs: []
 })
 
-const statistics = computed<LogStatistics>(() => {
-  return calculateStatistics(parsedEntries.value)
-})
+const chartEntries = ref<ParsedLogEntry[]>([])
 
-const validRate = computed(() => {
-  if (statistics.value.totalRequests === 0) return 0
-  return (statistics.value.validRequests / statistics.value.totalRequests) * 100
-})
+const validRate = ref(0)
 
 async function fetchLogFiles() {
   try {
@@ -49,6 +54,22 @@ async function fetchLogFiles() {
   } catch (e) {
     error.value = '无法连接到后端服务'
   }
+}
+
+function processData(lines: string[]) {
+  console.time('processLogData')
+  
+  const result = processLogData(lines)
+  
+  statistics.value = result.stats
+  chartEntries.value = markRaw(result.entries)
+  
+  validRate.value = result.stats.totalRequests > 0 
+    ? (result.stats.validRequests / result.stats.totalRequests) * 100 
+    : 0
+  
+  console.timeEnd('processLogData')
+  console.log(`Processed ${result.stats.totalRequests} entries, valid: ${result.stats.validRequests}`)
 }
 
 async function fetchLogContent() {
@@ -65,7 +86,7 @@ async function fetchLogContent() {
     const response = await fetch(url)
     if (response.ok) {
       const data: LogContent = await response.json()
-      rawLines.value = data.lines
+      processData(data.lines)
     } else {
       error.value = '读取日志文件失败'
     }
@@ -139,6 +160,8 @@ onMounted(async () => {
             <option :value="100">最近 100 行</option>
             <option :value="500">最近 500 行</option>
             <option :value="1000">最近 1000 行</option>
+            <option :value="5000">最近 5000 行</option>
+            <option :value="10000">最近 10000 行</option>
           </select>
         </div>
 
@@ -163,7 +186,7 @@ onMounted(async () => {
       <div v-if="statistics.totalRequests > 0" class="stats-grid">
         <div class="stat-card">
           <div class="stat-label">总请求数</div>
-          <div class="stat-value">{{ statistics.totalRequests }}</div>
+          <div class="stat-value">{{ statistics.totalRequests.toLocaleString() }}</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">解析成功率</div>
@@ -202,7 +225,7 @@ onMounted(async () => {
             <div class="card-subtitle">X轴: 请求序号 | Y轴: 响应时间</div>
           </div>
           <div class="card-body">
-            <ScatterPlot :entries="parsedEntries" :statistics="statistics" />
+            <ScatterPlot :entries="chartEntries" :statistics="statistics" />
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as d3 from 'd3'
 import type { ParsedLogEntry, LogStatistics } from '../utils/logParser'
 import { getStatusCodeColor } from '../utils/logParser'
@@ -10,16 +10,45 @@ const props = defineProps<{
 }>()
 
 const chartRef = ref<HTMLDivElement | null>(null)
-let svg: any = null
+let svgElement: SVGSVGElement | null = null
 let resizeObserver: ResizeObserver | null = null
 
+const MAX_DISPLAY_POINTS = 5000
+
+function getSampledData(entries: ParsedLogEntry[]): ParsedLogEntry[] {
+  const len = entries.length
+  const validEntries: ParsedLogEntry[] = []
+  
+  for (let i = 0; i < len; i++) {
+    if (entries[i].isValid) {
+      validEntries.push(entries[i])
+    }
+  }
+  
+  if (validEntries.length <= MAX_DISPLAY_POINTS) {
+    return validEntries
+  }
+  
+  const step = Math.ceil(validEntries.length / MAX_DISPLAY_POINTS)
+  const sampled: ParsedLogEntry[] = []
+  
+  for (let i = 0; i < validEntries.length; i += step) {
+    sampled.push(validEntries[i])
+  }
+  
+  return sampled
+}
+
 function createChart() {
-  if (!chartRef.value || props.entries.length === 0) return
+  if (!chartRef.value) return
 
-  const validEntries = props.entries.filter(e => e.isValid)
-  if (validEntries.length === 0) return
+  if (svgElement) {
+    d3.select(chartRef.value).selectAll('*').remove()
+    svgElement = null
+  }
 
-  d3.select(chartRef.value).selectAll('*').remove()
+  const displayData = getSampledData(props.entries)
+  if (displayData.length === 0) return
 
   const containerWidth = chartRef.value.clientWidth
   const containerHeight = 500
@@ -27,15 +56,18 @@ function createChart() {
   const width = containerWidth - margin.left - margin.right
   const height = containerHeight - margin.top - margin.bottom
 
-  svg = d3.select(chartRef.value)
+  const svg = d3.select(chartRef.value)
     .append('svg')
     .attr('width', containerWidth)
     .attr('height', containerHeight)
-    .append('g')
+
+  svgElement = svg.node()
+
+  const g = svg.append('g')
     .attr('transform', `translate(${margin.left},${margin.top})`)
 
   const xScale = d3.scaleLinear()
-    .domain([0, validEntries.length - 1])
+    .domain([0, displayData.length - 1])
     .range([0, width])
 
   const maxLatency = props.statistics.maxLatency > 0 ? props.statistics.maxLatency : 1
@@ -45,30 +77,37 @@ function createChart() {
 
   const xAxis = d3.axisBottom(xScale)
     .ticks(10)
-    .tickFormat((d: any) => `#${d + 1}`)
+    .tickFormat((d: any) => {
+      if (props.entries.length > MAX_DISPLAY_POINTS) {
+        const ratio = d / (displayData.length - 1)
+        const originalIndex = Math.floor(ratio * (props.entries.length - 1))
+        return `#${originalIndex + 1}`
+      }
+      return `#${d + 1}`
+    })
 
   const yAxis = d3.axisLeft(yScale)
     .ticks(10)
     .tickFormat((d: any) => `${d}s`)
 
-  svg.append('g')
+  g.append('g')
     .attr('transform', `translate(0,${height})`)
     .call(xAxis)
     .selectAll('text')
     .attr('transform', 'rotate(-45)')
     .style('text-anchor', 'end')
 
-  svg.append('g')
+  g.append('g')
     .call(yAxis)
 
-  svg.append('text')
+  g.append('text')
     .attr('transform', `translate(${width / 2},${height + 50})`)
     .style('text-anchor', 'middle')
     .style('font-size', '12px')
     .style('fill', '#6b7280')
     .text('请求序号')
 
-  svg.append('text')
+  g.append('text')
     .attr('transform', 'rotate(-90)')
     .attr('y', 0 - margin.left + 20)
     .attr('x', 0 - (height / 2))
@@ -91,63 +130,58 @@ function createChart() {
     .style('z-index', '1000')
     .style('box-shadow', '0 4px 6px rgba(0, 0, 0, 0.3)')
 
-  const dots = svg.selectAll('.dot')
-    .data(validEntries)
-    .enter()
-    .append('circle')
-    .attr('class', 'dot')
-    .attr('cx', (d: ParsedLogEntry, i: number) => xScale(i))
-    .attr('cy', (d: ParsedLogEntry) => yScale(d.latency))
-    .attr('r', 0)
-    .attr('fill', (d: ParsedLogEntry) => getStatusCodeColor(d.statusCode))
-    .attr('opacity', 0.7)
-    .attr('stroke', 'white')
-    .attr('stroke-width', 1)
-    .on('mouseover', function(event: any, d: ParsedLogEntry) {
-      d3.select(this)
-        .transition()
-        .duration(150)
-        .attr('r', 8)
-        .attr('opacity', 1)
+  const dotRadius = displayData.length > 1000 ? 2 : 4
+  const dotOpacity = displayData.length > 1000 ? 0.4 : 0.7
 
-      tooltip
-        .style('visibility', 'visible')
-        .html(`
-          <div style="font-weight: 600; margin-bottom: 8px;">${d.method} ${d.path}</div>
-          <div style="display: grid; grid-template-columns: auto auto; gap: 4px 12px;">
-            <span style="color: #9ca3af;">IP:</span>
-            <span>${d.ip}</span>
-            <span style="color: #9ca3af;">状态码:</span>
-            <span style="color: ${getStatusCodeColor(d.statusCode)}; font-weight: 600;">${d.statusCode}</span>
-            <span style="color: #9ca3af;">响应时间:</span>
-            <span>${d.latency.toFixed(3)}s</span>
-            <span style="color: #9ca3af;">时间:</span>
-            <span>${d.timestamp}</span>
-          </div>
-        `)
-    })
-    .on('mousemove', function(event: any) {
-      tooltip
-        .style('top', (event.pageY + 10) + 'px')
-        .style('left', (event.pageX + 10) + 'px')
-    })
-    .on('mouseout', function() {
-      d3.select(this)
-        .transition()
-        .duration(150)
-        .attr('r', 5)
-        .attr('opacity', 0.7)
+  for (let i = 0; i < displayData.length; i++) {
+    const d = displayData[i]
+    g.append('circle')
+      .attr('cx', xScale(i))
+      .attr('cy', yScale(d.latency))
+      .attr('r', dotRadius)
+      .attr('fill', getStatusCodeColor(d.statusCode))
+      .attr('opacity', dotOpacity)
+      .attr('stroke', 'none')
+      .on('mouseover', function(this: SVGCircleElement) {
+        d3.select(this)
+          .attr('r', 8)
+          .attr('opacity', 1)
+          .attr('stroke', 'white')
+          .attr('stroke-width', 2)
 
-      tooltip.style('visibility', 'hidden')
-    })
+        tooltip
+          .style('visibility', 'visible')
+          .html(`
+            <div style="font-weight: 600; margin-bottom: 8px;">${d.method} ${d.path}</div>
+            <div style="display: grid; grid-template-columns: auto auto; gap: 4px 12px;">
+              <span style="color: #9ca3af;">IP:</span>
+              <span>${d.ip}</span>
+              <span style="color: #9ca3af;">状态码:</span>
+              <span style="color: ${getStatusCodeColor(d.statusCode)}; font-weight: 600;">${d.statusCode}</span>
+              <span style="color: #9ca3af;">响应时间:</span>
+              <span>${d.latency.toFixed(3)}s</span>
+              <span style="color: #9ca3af;">时间:</span>
+              <span>${d.timestamp}</span>
+            </div>
+          `)
+      })
+      .on('mousemove', function(event: MouseEvent) {
+        tooltip
+          .style('top', (event.pageY + 10) + 'px')
+          .style('left', (event.pageX + 10) + 'px')
+      })
+      .on('mouseout', function(this: SVGCircleElement) {
+        d3.select(this)
+          .attr('r', dotRadius)
+          .attr('opacity', dotOpacity)
+          .attr('stroke', 'none')
 
-  dots.transition()
-    .duration(800)
-    .delay((d: any, i: number) => i * 20)
-    .attr('r', 5)
+        tooltip.style('visibility', 'hidden')
+      })
+  }
 
   if (props.statistics.p99Latency > 0) {
-    svg.append('line')
+    g.append('line')
       .attr('x1', 0)
       .attr('y1', yScale(props.statistics.p99Latency))
       .attr('x2', width)
@@ -155,29 +189,20 @@ function createChart() {
       .attr('stroke', '#ef4444')
       .attr('stroke-width', 2)
       .attr('stroke-dasharray', '5,5')
-      .attr('opacity', 0)
-      .transition()
-      .delay(500)
-      .duration(800)
       .attr('opacity', 0.8)
 
-    svg.append('text')
+    g.append('text')
       .attr('x', width - 5)
       .attr('y', yScale(props.statistics.p99Latency) - 8)
       .attr('text-anchor', 'end')
       .attr('fill', '#ef4444')
       .attr('font-size', '11px')
       .attr('font-weight', '600')
-      .attr('opacity', 0)
       .text(`P99: ${props.statistics.p99Latency.toFixed(3)}s`)
-      .transition()
-      .delay(500)
-      .duration(800)
-      .attr('opacity', 1)
   }
 
   if (props.statistics.p95Latency > 0) {
-    svg.append('line')
+    g.append('line')
       .attr('x1', 0)
       .attr('y1', yScale(props.statistics.p95Latency))
       .attr('x2', width)
@@ -185,25 +210,16 @@ function createChart() {
       .attr('stroke', '#f59e0b')
       .attr('stroke-width', 2)
       .attr('stroke-dasharray', '5,5')
-      .attr('opacity', 0)
-      .transition()
-      .delay(600)
-      .duration(800)
       .attr('opacity', 0.8)
 
-    svg.append('text')
+    g.append('text')
       .attr('x', width - 5)
       .attr('y', yScale(props.statistics.p95Latency) - 8)
       .attr('text-anchor', 'end')
       .attr('fill', '#f59e0b')
       .attr('font-size', '11px')
       .attr('font-weight', '600')
-      .attr('opacity', 0)
       .text(`P95: ${props.statistics.p95Latency.toFixed(3)}s`)
-      .transition()
-      .delay(600)
-      .duration(800)
-      .attr('opacity', 1)
   }
 
   const legendData = [
@@ -213,10 +229,11 @@ function createChart() {
     { label: '5xx 服务器错误', color: '#ef4444' }
   ]
 
-  const legend = svg.append('g')
+  const legend = g.append('g')
     .attr('transform', 'translate(10, 10)')
 
-  legendData.forEach((item, i) => {
+  for (let i = 0; i < legendData.length; i++) {
+    const item = legendData[i]
     const legendRow = legend.append('g')
       .attr('transform', `translate(0, ${i * 20})`)
 
@@ -231,7 +248,21 @@ function createChart() {
       .attr('font-size', '11px')
       .attr('fill', '#6b7280')
       .text(item.label)
-  })
+  }
+
+  if (props.entries.length > MAX_DISPLAY_POINTS) {
+    let validCount = 0
+    for (let i = 0; i < props.entries.length; i++) {
+      if (props.entries[i].isValid) validCount++
+    }
+    g.append('text')
+      .attr('x', width / 2)
+      .attr('y', -25)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#fbbf24')
+      .attr('font-size', '12px')
+      .text(`数据量大，已采样显示 (${MAX_DISPLAY_POINTS}/${validCount} 点)`)
+  }
 }
 
 function handleResize() {
@@ -246,13 +277,19 @@ onMounted(() => {
   }
 })
 
-watch(() => [props.entries, props.statistics], () => {
-  createChart()
-}, { deep: true })
+watch(
+  () => props.statistics.totalRequests,
+  () => {
+    createChart()
+  }
+)
 
 onBeforeUnmount(() => {
   if (resizeObserver) {
     resizeObserver.disconnect()
+  }
+  if (chartRef.value) {
+    d3.select(chartRef.value).selectAll('*').remove()
   }
 })
 </script>
