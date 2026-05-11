@@ -3,7 +3,10 @@ const { MongoClient } = require('mongodb');
 
 class MongoReader extends Readable {
   constructor(options = {}) {
-    super({ objectMode: true, highWaterMark: 1000 });
+    super({ 
+      objectMode: true, 
+      highWaterMark: options.highWaterMark || 500 
+    });
     
     this.mongoUri = options.mongoUri || process.env.MONGO_URI;
     this.dbName = options.dbName || process.env.MONGO_DB;
@@ -16,67 +19,120 @@ class MongoReader extends Readable {
     this.db = null;
     this.collection = null;
     this.cursor = null;
+    this.isReading = false;
+    this.cursorStream = null;
+    this.documentsRead = 0;
   }
 
   async _connect() {
     if (this.client) return;
     
+    console.log(`Connecting to MongoDB: ${this.mongoUri}/${this.dbName}`);
+    
     this.client = new MongoClient(this.mongoUri, {
-      maxPoolSize: 5,
-      serverSelectionTimeoutMS: 5000
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 30000,
+      connectTimeoutMS: 30000,
+      socketTimeoutMS: 360000
     });
     
     await this.client.connect();
     this.db = this.client.db(this.dbName);
     this.collection = this.db.collection(this.collectionName);
+    
+    console.log(`Connected to MongoDB database: ${this.dbName}`);
+    
+    const count = await this.collection.countDocuments(this.query);
+    console.log(`Total documents to process: ${count}`);
   }
 
-  async _read(size) {
-    try {
-      if (!this.cursor) {
-        await this._connect();
-        
-        this.cursor = this.collection.find(this.query, {
-          projection: this.projection,
-          batchSize: this.batchSize,
-          noCursorTimeout: true
-        }).stream();
-        
-        this.cursor.on('data', (doc) => {
-          if (!this.push(doc)) {
-            this.cursor.pause();
-          }
-        });
-        
-        this.cursor.on('end', () => {
-          this.push(null);
-          this._cleanup();
-        });
-        
-        this.cursor.on('error', (err) => {
-          this.emit('error', err);
-          this._cleanup();
-        });
-      } else {
-        this.cursor.resume();
-      }
-    } catch (err) {
+  _read(size) {
+    if (this.isReading) return;
+    this.isReading = true;
+    
+    this._startReading().catch((err) => {
+      this.isReading = false;
       this.emit('error', err);
       this._cleanup();
+    });
+  }
+
+  async _startReading() {
+    if (!this.cursorStream) {
+      await this._connect();
+      
+      const cursor = this.collection.find(this.query, {
+        projection: this.projection,
+        batchSize: this.batchSize,
+        noCursorTimeout: true,
+        allowPartialResults: false
+      });
+      
+      this.cursorStream = cursor.stream();
+      
+      this.cursorStream.on('data', (doc) => {
+        this.documentsRead++;
+        
+        if (this.documentsRead % 10000 === 0) {
+          console.log(`Read ${this.documentsRead} documents from MongoDB...`);
+        }
+        
+        if (!this.push(doc)) {
+          this.cursorStream.pause();
+        }
+      });
+      
+      this.cursorStream.on('end', () => {
+        console.log(`Finished reading ${this.documentsRead} documents from MongoDB`);
+        this.push(null);
+        this._cleanup();
+      });
+      
+      this.cursorStream.on('error', (err) => {
+        console.error('MongoDB cursor error:', err.message);
+        this.emit('error', err);
+        this._cleanup();
+      });
+      
+      this.cursorStream.on('close', () => {
+        this.isReading = false;
+      });
+      
+    } else {
+      if (this.cursorStream.isPaused()) {
+        this.cursorStream.resume();
+      }
     }
+    
+    this.isReading = false;
   }
 
   async _cleanup() {
-    if (this.cursor) {
-      await this.cursor.close();
-      this.cursor = null;
+    try {
+      if (this.cursorStream) {
+        this.cursorStream.destroy();
+        this.cursorStream = null;
+      }
+      
+      if (this.client) {
+        console.log('Closing MongoDB connection...');
+        await this.client.close();
+        this.client = null;
+        this.db = null;
+        this.collection = null;
+      }
+    } catch (err) {
+      console.error('Error during cleanup:', err.message);
     }
-    if (this.client) {
-      await this.client.close();
-      this.client = null;
-      this.db = null;
-      this.collection = null;
-    }
+  }
+
+  _destroy(err, callback) {
+    this._cleanup().then(() => {
+      callback(err);
+    }).catch((cleanupErr) => {
+      console.error('Error in destroy:', cleanupErr.message);
+      callback(err || cleanupErr);
+    });
   }
 }
 
