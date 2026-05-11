@@ -219,9 +219,9 @@ export class FormulaGraph {
     }
   }
 
-  private topologicalSort(): string[] {
+  private topologicalSort(): { order: string[]; circular: Set<string> } {
     const inDegree: Map<string, number> = new Map()
-    const result: string[] = []
+    const order: string[] = []
     const queue: string[] = []
     
     for (const [id, node] of this.dag) {
@@ -233,7 +233,7 @@ export class FormulaGraph {
     
     while (queue.length > 0) {
       const current = queue.shift()!
-      result.push(current)
+      order.push(current)
       
       const node = this.dag.get(current)!
       for (const dep of node.dependents) {
@@ -245,11 +245,18 @@ export class FormulaGraph {
       }
     }
     
-    return result
+    const circular = new Set<string>()
+    for (const [id, deg] of inDegree) {
+      if (deg > 0) {
+        circular.add(id)
+      }
+    }
+    
+    return { order, circular }
   }
 
   private computeAll(): void {
-    const order = this.topologicalSort()
+    const { order, circular } = this.topologicalSort()
     const values: Map<string, number> = new Map()
     
     for (const cellId of order) {
@@ -290,6 +297,15 @@ export class FormulaGraph {
       }
       
       this.computed.set(cellId, base)
+    }
+    
+    for (const cellId of circular) {
+      const cell = this.cells.get(cellId)!
+      this.computed.set(cellId, {
+        ...cell,
+        value: '#CIRCULAR',
+        error: 'Circular reference'
+      })
     }
   }
 
@@ -354,7 +370,7 @@ export class FormulaGraph {
   }
 
   private recomputeAffected(affected: string[]): void {
-    const allOrder = this.topologicalSort()
+    const { order: allOrder, circular } = this.topologicalSort()
     const affectedSet = new Set(affected)
     const order = allOrder.filter((id) => affectedSet.has(id))
     
@@ -404,6 +420,17 @@ export class FormulaGraph {
       }
       
       this.computed.set(cellId, base)
+    }
+    
+    for (const cellId of circular) {
+      if (affectedSet.has(cellId)) {
+        const cell = this.cells.get(cellId)!
+        this.computed.set(cellId, {
+          ...cell,
+          value: '#CIRCULAR',
+          error: 'Circular reference'
+        })
+      }
     }
   }
 
