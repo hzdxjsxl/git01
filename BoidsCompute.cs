@@ -9,9 +9,9 @@ public static class BoidsCompute
         Vector3 targetPosition,
         List<UnitMover> neighbors)
     {
-        Vector3 separation = ComputeSeparation(currentPosition, neighbors);
-        Vector3 alignment = ComputeAlignment(currentVelocity, neighbors);
-        Vector3 cohesion = ComputeCohesion(currentPosition, neighbors);
+        Vector3 separation = ComputeSeparation(currentPosition, currentVelocity, neighbors);
+        Vector3 alignment = ComputeAlignment(currentPosition, currentVelocity, neighbors);
+        Vector3 cohesion = ComputeCohesion(currentPosition, currentVelocity, neighbors);
         Vector3 targetSteering = ComputeTargetSteering(currentPosition, currentVelocity, targetPosition);
 
         separation *= FlockSettings.SeparationWeight;
@@ -25,9 +25,9 @@ public static class BoidsCompute
         return totalForce;
     }
 
-    private static Vector3 ComputeSeparation(Vector3 currentPosition, List<UnitMover> neighbors)
+    private static Vector3 ComputeSeparation(Vector3 currentPosition, Vector3 currentVelocity, List<UnitMover> neighbors)
     {
-        Vector3 separation = Vector3.zero;
+        Vector3 awayDirection = Vector3.zero;
         int count = 0;
 
         foreach (var neighbor in neighbors)
@@ -40,22 +40,25 @@ public static class BoidsCompute
             if (distance > 0 && distance < FlockSettings.SeparationRadius)
             {
                 float influence = 1f - (distance / FlockSettings.SeparationRadius);
-                separation += diff.normalized * influence;
+                awayDirection += diff.normalized * influence;
                 count++;
             }
         }
 
-        if (count > 0)
+        if (count == 0)
         {
-            separation /= count;
+            return Vector3.zero;
         }
 
-        return separation;
+        awayDirection /= count;
+        Vector3 desired = awayDirection.normalized * FlockSettings.MaxSpeed;
+        Vector3 steer = desired - currentVelocity;
+        return Vector3.ClampMagnitude(steer, FlockSettings.MaxSteerForce);
     }
 
-    private static Vector3 ComputeAlignment(Vector3 currentVelocity, List<UnitMover> neighbors)
+    private static Vector3 ComputeAlignment(Vector3 currentPosition, Vector3 currentVelocity, List<UnitMover> neighbors)
     {
-        Vector3 alignment = Vector3.zero;
+        Vector3 averageVelocity = Vector3.zero;
         int count = 0;
 
         foreach (var neighbor in neighbors)
@@ -68,22 +71,23 @@ public static class BoidsCompute
 
             if (distance > 0 && distance < FlockSettings.AlignmentRadius)
             {
-                alignment += neighbor.CurrentVelocity;
+                averageVelocity += neighbor.CurrentVelocity;
                 count++;
             }
         }
 
-        if (count > 0)
+        if (count == 0)
         {
-            alignment /= count;
-            alignment = Vector3.ClampMagnitude(alignment, FlockSettings.MaxSpeed);
-            alignment -= currentVelocity;
+            return Vector3.zero;
         }
 
-        return alignment;
+        averageVelocity /= count;
+        averageVelocity = Vector3.ClampMagnitude(averageVelocity, FlockSettings.MaxSpeed);
+        Vector3 steer = averageVelocity - currentVelocity;
+        return Vector3.ClampMagnitude(steer, FlockSettings.MaxSteerForce);
     }
 
-    private static Vector3 ComputeCohesion(Vector3 currentPosition, List<UnitMover> neighbors)
+    private static Vector3 ComputeCohesion(Vector3 currentPosition, Vector3 currentVelocity, List<UnitMover> neighbors)
     {
         Vector3 centerOfMass = Vector3.zero;
         int count = 0;
@@ -109,15 +113,16 @@ public static class BoidsCompute
         }
 
         centerOfMass /= count;
-        return Seek(currentPosition, centerOfMass);
+        return SeekSteer(currentPosition, currentVelocity, centerOfMass);
     }
 
-    private static Vector3 Seek(Vector3 currentPosition, Vector3 target)
+    private static Vector3 SeekSteer(Vector3 currentPosition, Vector3 currentVelocity, Vector3 target)
     {
         Vector3 desired = target - currentPosition;
         desired.Normalize();
         desired *= FlockSettings.MaxSpeed;
-        return desired;
+        Vector3 steer = desired - currentVelocity;
+        return Vector3.ClampMagnitude(steer, FlockSettings.MaxSteerForce);
     }
 
     private static Vector3 ComputeTargetSteering(
@@ -130,7 +135,8 @@ public static class BoidsCompute
 
         if (distance < FlockSettings.ArrivalRadius)
         {
-            return Vector3.zero - currentVelocity;
+            Vector3 stopForce = Vector3.zero - currentVelocity;
+            return Vector3.ClampMagnitude(stopForce, FlockSettings.MaxSteerForce);
         }
 
         if (distance < FlockSettings.SlowingRadius)
