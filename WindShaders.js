@@ -17,6 +17,9 @@ export const WindShaders = {
         uniform float u_speed;
         uniform vec2 u_windTextureSize;
         uniform float u_resetProbability;
+        uniform vec4 u_lonLatBounds;
+        uniform float u_lonRange;
+        uniform float u_latRange;
         
         varying vec2 vUv;
         
@@ -27,22 +30,39 @@ export const WindShaders = {
         
         vec2 bilinearSampleWind(vec2 uv) {
             vec2 texelSize = 1.0 / u_windTextureSize;
+            vec2 halfTexel = 0.5 / u_windTextureSize;
             
-            vec2 uv00 = floor(uv * u_windTextureSize) / u_windTextureSize;
-            vec2 uv11 = uv00 + texelSize;
+            uv = clamp(uv, halfTexel, 1.0 - halfTexel);
+            
+            vec2 texCoords = uv * u_windTextureSize;
+            vec2 iTexCoords = floor(texCoords);
+            vec2 fTexCoords = fract(texCoords);
+            
+            vec2 uv00 = iTexCoords / u_windTextureSize;
+            vec2 uv11 = (iTexCoords + vec2(1.0)) / u_windTextureSize;
             vec2 uv01 = vec2(uv00.x, uv11.y);
             vec2 uv10 = vec2(uv11.x, uv00.y);
             
-            vec2 f = fract(uv * u_windTextureSize);
+            vec2 w00 = sampleWind(uv00 + halfTexel);
+            vec2 w10 = sampleWind(uv10 + halfTexel);
+            vec2 w01 = sampleWind(uv01 + halfTexel);
+            vec2 w11 = sampleWind(uv11 + halfTexel);
             
-            vec2 w00 = sampleWind(uv00);
-            vec2 w10 = sampleWind(uv10);
-            vec2 w01 = sampleWind(uv01);
-            vec2 w11 = sampleWind(uv11);
+            vec2 w0 = mix(w00, w10, fTexCoords.x);
+            vec2 w1 = mix(w01, w11, fTexCoords.x);
+            return mix(w0, w1, fTexCoords.y);
+        }
+        
+        vec2 globalUVToWindUV(vec2 globalUV) {
+            vec2 lonLat;
+            lonLat.x = globalUV.x * 360.0 - 180.0;
+            lonLat.y = globalUV.y * 180.0 - 90.0;
             
-            vec2 w0 = mix(w00, w10, f.x);
-            vec2 w1 = mix(w01, w11, f.x);
-            return mix(w0, w1, f.y);
+            vec2 windUV;
+            windUV.x = (lonLat.x - u_lonLatBounds.x) / u_lonRange;
+            windUV.y = 1.0 - (lonLat.y - u_lonLatBounds.z) / u_latRange;
+            
+            return windUV;
         }
         
         float rand(vec2 co) {
@@ -63,27 +83,17 @@ export const WindShaders = {
                 maxAge = 50.0 + rand(vUv) * 100.0;
             }
             
-            vec2 wind = bilinearSampleWind(pos);
-            
-            float lonRange = 360.0;
-            float latRange = 180.0;
+            vec2 windUV = globalUVToWindUV(pos);
+            vec2 wind = bilinearSampleWind(windUV);
             
             vec2 velocity = wind * u_speed * u_deltaTime;
-            velocity.x = velocity.x / lonRange;
-            velocity.y = velocity.y / latRange;
+            velocity.x = velocity.x / 360.0;
+            velocity.y = velocity.y / 180.0;
             
             pos += velocity;
             
-            pos.x = fract(pos.x);
-            
-            if (pos.y < 0.0) {
-                pos.y = 0.0;
-                velocity.y *= -0.5;
-            }
-            if (pos.y > 1.0) {
-                pos.y = 1.0;
-                velocity.y *= -0.5;
-            }
+            pos.x = fract(pos.x + 1.0);
+            pos.y = clamp(pos.y, 0.0, 1.0);
             
             age += u_deltaTime;
             
@@ -101,6 +111,9 @@ export const WindShaders = {
         uniform float u_fadeEnd;
         uniform float u_radius;
         uniform vec2 u_windTextureSize;
+        uniform vec4 u_lonLatBounds;
+        uniform float u_lonRange;
+        uniform float u_latRange;
         
         attribute vec2 a_uv;
         
@@ -110,48 +123,67 @@ export const WindShaders = {
         varying vec2 v_wind;
         varying float v_life;
         
-        vec3 lonLatToWorld(vec2 lonLat, float radius) {
-            float lon = radians(lonLat.x * 360.0 - 180.0);
-            float lat = radians(lonLat.y * 180.0 - 90.0);
+        vec3 globalUVToWorld(vec2 uv, float radius) {
+            float lon = radians(uv.x * 360.0 - 180.0);
+            float lat = radians(uv.y * 180.0 - 90.0);
             
-            float x = radius * cos(lat) * cos(lon);
-            float y = radius * sin(lat);
-            float z = radius * cos(lat) * sin(lon);
+            float particleRadius = radius * 1.002;
+            float x = particleRadius * cos(lat) * cos(lon);
+            float y = particleRadius * sin(lat);
+            float z = particleRadius * cos(lat) * sin(lon);
             
             return vec3(x, y, z);
         }
         
+        vec2 globalUVToWindUV(vec2 globalUV) {
+            vec2 lonLat;
+            lonLat.x = globalUV.x * 360.0 - 180.0;
+            lonLat.y = globalUV.y * 180.0 - 90.0;
+            
+            vec2 windUV;
+            windUV.x = (lonLat.x - u_lonLatBounds.x) / u_lonRange;
+            windUV.y = 1.0 - (lonLat.y - u_lonLatBounds.z) / u_latRange;
+            
+            return windUV;
+        }
+        
         vec2 bilinearSampleWind(vec2 uv, sampler2D tex, vec2 texSize) {
             vec2 texelSize = 1.0 / texSize;
+            vec2 halfTexel = 0.5 / texSize;
             
-            vec2 uv00 = floor(uv * texSize) / texSize;
-            vec2 uv11 = uv00 + texelSize;
+            uv = clamp(uv, halfTexel, 1.0 - halfTexel);
+            
+            vec2 texCoords = uv * texSize;
+            vec2 iTexCoords = floor(texCoords);
+            vec2 fTexCoords = fract(texCoords);
+            
+            vec2 uv00 = iTexCoords / texSize;
+            vec2 uv11 = (iTexCoords + vec2(1.0)) / texSize;
             vec2 uv01 = vec2(uv00.x, uv11.y);
             vec2 uv10 = vec2(uv11.x, uv00.y);
             
-            vec2 f = fract(uv * texSize);
+            vec2 w00 = texture2D(tex, uv00 + halfTexel).xy;
+            vec2 w10 = texture2D(tex, uv10 + halfTexel).xy;
+            vec2 w01 = texture2D(tex, uv01 + halfTexel).xy;
+            vec2 w11 = texture2D(tex, uv11 + halfTexel).xy;
             
-            vec2 w00 = texture2D(tex, uv00).xy;
-            vec2 w10 = texture2D(tex, uv10).xy;
-            vec2 w01 = texture2D(tex, uv01).xy;
-            vec2 w11 = texture2D(tex, uv11).xy;
-            
-            vec2 w0 = mix(w00, w10, f.x);
-            vec2 w1 = mix(w01, w11, f.x);
-            return mix(w0, w1, f.y);
+            vec2 w0 = mix(w00, w10, fTexCoords.x);
+            vec2 w1 = mix(w01, w11, fTexCoords.x);
+            return mix(w0, w1, fTexCoords.y);
         }
         
         void main() {
             vec4 posData = texture2D(u_positionTexture, a_uv);
-            vec2 lonLat = posData.xy;
+            vec2 globalUV = posData.xy;
             v_age = posData.z;
             v_maxAge = posData.w;
             v_life = v_age / v_maxAge;
             
-            v_wind = bilinearSampleWind(lonLat, u_windTexture, u_windTextureSize);
+            vec2 windUV = globalUVToWindUV(globalUV);
+            v_wind = bilinearSampleWind(windUV, u_windTexture, u_windTextureSize);
             v_windStrength = length(v_wind);
             
-            vec3 worldPos = lonLatToWorld(lonLat, u_radius);
+            vec3 worldPos = globalUVToWorld(globalUV, u_radius);
             worldPos = (u_rotationMatrix * vec4(worldPos, 1.0)).xyz;
             
             float ageFactor = 1.0;
@@ -161,12 +193,11 @@ export const WindShaders = {
                 ageFactor = (1.0 - v_life) / (1.0 - u_fadeEnd);
             }
             
-            float sizeMultiplier = 1.0 + v_windStrength * 0.05;
+            float sizeMultiplier = 1.0 + v_windStrength * 0.02;
             
             vec4 mvPosition = modelViewMatrix * vec4(worldPos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
             gl_PointSize = u_particleSize * sizeMultiplier * ageFactor;
-            gl_PointSize *= (1.0 / -mvPosition.z);
         }
     `,
 
@@ -197,13 +228,13 @@ export const WindShaders = {
             float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
             
             float lifeAlpha = 1.0;
-            if (v_life < 0.15) {
-                lifeAlpha = v_life / 0.15;
-            } else if (v_life > 0.85) {
-                lifeAlpha = (1.0 - v_life) / 0.15;
+            if (v_life < 0.05) {
+                lifeAlpha = v_life / 0.05;
+            } else if (v_life > 0.95) {
+                lifeAlpha = (1.0 - v_life) / 0.05;
             }
             
-            gl_FragColor = vec4(color, alpha * lifeAlpha * 0.9);
+            gl_FragColor = vec4(color, alpha * lifeAlpha * 0.95);
         }
     `,
 

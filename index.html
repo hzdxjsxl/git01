@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全球风场粒子可视化</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background-color: #050510;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            color: white;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+        
+        #controls h2 {
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: #00ffff;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #aaa;
+        }
+        
+        .control-group input[type="range"] {
+            width: 200px;
+        }
+        
+        .value-display {
+            display: inline-block;
+            width: 50px;
+            text-align: right;
+            font-size: 12px;
+            color: #00ffff;
+        }
+        
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            z-index: 200;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(0, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #00ffff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        #stats {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            color: white;
+            z-index: 100;
+            font-size: 12px;
+            backdrop-filter: blur(10px);
+        }
+        
+        #stats div {
+            margin-bottom: 5px;
+        }
+        
+        #stats span {
+            color: #00ffff;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <span class="spinner"></span>
+        正在加载风场数据...
+    </div>
+    
+    <div id="canvas-container"></div>
+    
+    <div id="controls" style="display: none;">
+        <h2>风场粒子控制</h2>
+        
+        <div class="control-group">
+            <label>粒子数量: <span id="particle-count-value" class="value-display">500,000</span></label>
+            <input type="range" id="particle-count" min="10000" max="2000000" step="10000" value="500000">
+        </div>
+        
+        <div class="control-group">
+            <label>风速缩放: <span id="wind-speed-value" class="value-display">1.0</span></label>
+            <input type="range" id="wind-speed" min="0.1" max="5.0" step="0.1" value="1.0">
+        </div>
+        
+        <div class="control-group">
+            <label>粒子大小: <span id="particle-size-value" class="value-display">2.0</span></label>
+            <input type="range" id="particle-size" min="0.5" max="5.0" step="0.1" value="2.0">
+        </div>
+        
+        <div class="control-group">
+            <label>重置概率: <span id="reset-prob-value" class="value-display">0.02%</span></label>
+            <input type="range" id="reset-prob" min="0.0001" max="0.01" step="0.0001" value="0.0002">
+        </div>
+        
+        <div class="control-group">
+            <label>
+                <input type="checkbox" id="auto-rotate" checked>
+                自动旋转
+            </label>
+        </div>
+        
+        <button id="reset-btn" style="background: #00ffff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+            重置粒子
+        </button>
+    </div>
+    
+    <div id="stats" style="display: none;">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>粒子数: <span id="stat-particles">0</span></div>
+        <div>风场网格: <span id="stat-grid">0 x 0</span></div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { ParticleSystem } from './ParticleSystemSimple.js';
+
+        let particleSystem = null;
+        let frameCount = 0;
+        let lastTime = performance.now();
+
+        const container = document.getElementById('canvas-container');
+        const loading = document.getElementById('loading');
+        const controls = document.getElementById('controls');
+        const stats = document.getElementById('stats');
+
+        async function init() {
+            try {
+                particleSystem = new ParticleSystem({
+                    container: container,
+                    particleCount: 30000,
+                    particleSize: 5.0,
+                    windSpeed: 10.0,
+                    globeRadius: 100,
+                    autoRotate: true,
+                    rotationSpeed: 0.0005
+                });
+
+                await particleSystem.init('wind-data.json');
+                
+                loading.style.display = 'none';
+                controls.style.display = 'block';
+                stats.style.display = 'block';
+
+                document.getElementById('stat-particles').textContent = particleSystem.options.particleCount.toLocaleString();
+                const dims = particleSystem.windDataTexture.getDimensions();
+                document.getElementById('stat-grid').textContent = `${dims.width} x ${dims.height}`;
+                
+                document.getElementById('particle-count').value = particleSystem.options.particleCount;
+                document.getElementById('particle-count-value').textContent = particleSystem.options.particleCount.toLocaleString();
+                document.getElementById('wind-speed').value = particleSystem.options.windSpeed;
+                document.getElementById('wind-speed-value').textContent = particleSystem.options.windSpeed.toFixed(1);
+                document.getElementById('particle-size').value = particleSystem.options.particleSize;
+                document.getElementById('particle-size-value').textContent = particleSystem.options.particleSize.toFixed(1);
+
+                particleSystem.start();
+                animateStats();
+                
+            } catch (error) {
+                console.error('Error initializing particle system:', error);
+                loading.innerHTML = `加载失败: ${error.message}`;
+            }
+        }
+
+        function animateStats() {
+            requestAnimationFrame(animateStats);
+            frameCount++;
+            
+            const now = performance.now();
+            if (now - lastTime >= 1000) {
+                document.getElementById('fps').textContent = frameCount;
+                frameCount = 0;
+                lastTime = now;
+            }
+        }
+
+        document.getElementById('wind-speed').addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            document.getElementById('wind-speed-value').textContent = value.toFixed(1);
+            particleSystem.setWindSpeed(value);
+        });
+
+        document.getElementById('particle-size').addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            document.getElementById('particle-size-value').textContent = value.toFixed(1);
+            particleSystem.setParticleSize(value);
+        });
+
+        document.getElementById('reset-prob').addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            document.getElementById('reset-prob-value').textContent = (value * 100).toFixed(2) + '%';
+            particleSystem.options.resetProbability = value;
+            particleSystem.advectionMaterial.uniforms.u_resetProbability.value = value;
+        });
+
+        document.getElementById('auto-rotate').addEventListener('change', (e) => {
+            particleSystem.options.autoRotate = e.target.checked;
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            particleSystem.resetParticles();
+        });
+
+        init();
+    </script>
+</body>
+</html>
