@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>农业传感器态势感知系统</title>
+  <link rel="stylesheet" href="/node_modules/leaflet/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <div class="header-title">
+        <h1>🌱 农业土壤湿度传感器态势感知系统</h1>
+        <span class="subtitle">实时 IDW 插值热力图</span>
+      </div>
+      <div class="header-actions">
+        <button id="refresh-btn" class="btn btn-primary">
+          🔄 刷新数据
+        </button>
+      </div>
+    </header>
+
+    <div class="main-content">
+      <aside class="sidebar">
+        <div class="panel">
+          <h3>📊 数据统计</h3>
+          <div class="stats-grid">
+            <div class="stat-item">
+              <span class="stat-label">传感器总数</span>
+              <span class="stat-value" id="sensor-count">0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">平均湿度</span>
+              <span class="stat-value" id="avg-humidity">0%</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">最低湿度</span>
+              <span class="stat-value" id="min-humidity">0%</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">最高湿度</span>
+              <span class="stat-value" id="max-humidity">0%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>⚙️ IDW 参数</h3>
+          <div class="control-group">
+            <label>
+              幂次 (Power): <span id="power-value">2.0</span>
+            </label>
+            <input type="range" id="power-slider" min="1" max="5" step="0.5" value="2">
+            <small>值越大，局部影响越强</small>
+          </div>
+
+          <div class="control-group">
+            <label>
+              不透明度: <span id="opacity-value">0.75</span>
+            </label>
+            <input type="range" id="opacity-slider" min="0.1" max="1" step="0.05" value="0.75">
+          </div>
+
+          <div class="control-group">
+            <label>
+              分辨率: <span id="resolution-value">4</span>
+            </label>
+            <input type="range" id="resolution-slider" min="1" max="8" step="1" value="4">
+            <small>值越小，精度越高但越慢</small>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>🎨 图例</h3>
+          <div class="legend">
+            <div class="legend-bar">
+              <div class="legend-gradient"></div>
+            </div>
+            <div class="legend-labels">
+              <span>干燥 (0%)</span>
+              <span>适中 (50%)</span>
+              <span>湿润 (100%)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>ℹ️ 说明</h3>
+          <ul class="info-list">
+            <li>数据来自后端 MongoDB 数据库</li>
+            <li>前端实现 IDW 反距离加权插值</li>
+            <li>Canvas 瓦片层渲染，性能优化</li>
+            <li>缩放时自动调整分辨率</li>
+          </ul>
+        </div>
+      </aside>
+
+      <main class="map-container">
+        <div id="map"></div>
+        <div id="loading" class="loading-overlay">
+          <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>正在加载传感器数据...</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/node_modules/leaflet/dist/leaflet.js"></script>
+  <script type="module" src="/dist/main.js"></script>
+</body>
+</html>
