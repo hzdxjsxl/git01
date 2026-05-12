@@ -1,0 +1,104 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #000008;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+#app-container {
+  width: 100%;
+  height: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
+#app-container canvas {
+  display: block;
+  cursor: crosshair;
+}
+
+.info-panel {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  z-index: 100;
+  color: #ffffff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  user-select: none;
+}
+
+.info-panel h1 {
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+  background: linear-gradient(135deg, #ffd700, #ff8c00, #4169e1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.info-panel .subtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.controls-info {
+  margin-bottom: 16px;
+}
+
+.control-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.control-item .key {
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
+  min-width: 80px;
+  text-align: center;
+}
+
+.control-item .desc {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.info-panel .stats {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 1px;
+}
+
+@media (max-width: 768px) {
+  .info-panel {
+    top: 16px;
+    left: 16px;
+  }
+
+  .info-panel h1 {
+    font-size: 20px;
+  }
+
+  .controls-info {
+    display: none;
+  }
+}
