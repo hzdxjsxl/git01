@@ -7,6 +7,13 @@ export class IDWHeatmapLayer {
         this.colorMapper = options?.colorMapper ?? ColorMapper.createDefaultHumidityMapper();
         this.resolution = options?.resolution ?? 4;
         this.opacity = options?.opacity ?? 0.75;
+        this.useFastInterpolation = options?.useFastInterpolation ?? true;
+        this.interpolationMode = options?.interpolationMode ?? 'adaptive';
+        this.performanceStats = {
+            tileRenderTimes: [],
+            totalPixels: 0,
+            totalTiles: 0
+        };
         this.offscreenCanvas = document.createElement('canvas');
         const ctx = this.offscreenCanvas.getContext('2d');
         if (!ctx) {
@@ -26,11 +33,30 @@ export class IDWHeatmapLayer {
             done(undefined, tile);
             return tile;
         }
-        requestAnimationFrame(() => {
-            this.renderTile(coords, ctx, size);
-            done(undefined, tile);
-        });
+        const startTime = performance.now();
+        this.renderTile(coords, ctx, size);
+        const renderTime = performance.now() - startTime;
+        this.performanceStats.tileRenderTimes.push(renderTime);
+        if (this.performanceStats.tileRenderTimes.length > 100) {
+            this.performanceStats.tileRenderTimes.shift();
+        }
+        this.performanceStats.totalTiles++;
+        done(undefined, tile);
         return tile;
+    }
+    getInterpolationModeForZoom(zoom) {
+        if (this.interpolationMode !== 'adaptive') {
+            return this.interpolationMode === 'precise' ? 'precise' : 'fast';
+        }
+        if (zoom <= 10) {
+            return 'fast';
+        }
+        else if (zoom <= 14) {
+            return this.useFastInterpolation ? 'fast' : 'precise';
+        }
+        else {
+            return 'precise';
+        }
     }
     renderTile(coords, ctx, size) {
         const map = this.gridLayer._map;
@@ -48,14 +74,26 @@ export class IDWHeatmapLayer {
         if (canvasWidth <= 0 || canvasHeight <= 0) {
             return;
         }
-        const grid = this.idwCalculator.interpolateGrid(tileMinLng, tileMinLat, tileMaxLng, tileMaxLat, canvasWidth, canvasHeight);
+        this.performanceStats.totalPixels += canvasWidth * canvasHeight;
+        const zoom = coords.z;
+        const mode = this.getInterpolationModeForZoom(zoom);
+        let grid;
+        if (mode === 'fast' && this.useFastInterpolation && canvasWidth >= 32) {
+            const sampleRate = Math.min(4, Math.max(2, Math.floor(canvasWidth / 64)));
+            grid = this.idwCalculator.interpolateGridFast(tileMinLng, tileMinLat, tileMaxLng, tileMaxLat, canvasWidth, canvasHeight, sampleRate);
+        }
+        else {
+            grid = this.idwCalculator.interpolateGrid(tileMinLng, tileMinLat, tileMaxLng, tileMaxLat, canvasWidth, canvasHeight, {
+                blockSize: 16
+            });
+        }
         const imageData = this.colorMapper.createColorData(grid, canvasWidth, canvasHeight);
         this.offscreenCanvas.width = canvasWidth;
         this.offscreenCanvas.height = canvasHeight;
         const offCtx = this.offscreenCtx;
         offCtx.putImageData(imageData, 0, 0);
         ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        ctx.imageSmoothingQuality = mode === 'fast' ? 'medium' : 'high';
         ctx.drawImage(this.offscreenCanvas, 0, 0, canvasWidth, canvasHeight, 0, 0, pixelWidth, pixelHeight);
     }
     getTileBounds(coords) {
@@ -100,8 +138,37 @@ export class IDWHeatmapLayer {
         this.opacity = Math.max(0, Math.min(1, opacity));
         this.gridLayer.setOpacity(this.opacity);
     }
+    setFastInterpolation(enabled) {
+        this.useFastInterpolation = enabled;
+        this.redraw();
+    }
+    setInterpolationMode(mode) {
+        this.interpolationMode = mode;
+        this.redraw();
+    }
     redraw() {
+        this.idwCalculator.clearCache();
         this.gridLayer.redraw();
+    }
+    getPerformanceStats() {
+        const times = this.performanceStats.tileRenderTimes;
+        const avgTime = times.length > 0
+            ? times.reduce((a, b) => a + b, 0) / times.length
+            : 0;
+        return {
+            avgTileRenderTime: avgTime,
+            totalTiles: this.performanceStats.totalTiles,
+            totalPixels: this.performanceStats.totalPixels,
+            cacheStats: this.idwCalculator.getCacheStats()
+        };
+    }
+    resetPerformanceStats() {
+        this.performanceStats = {
+            tileRenderTimes: [],
+            totalPixels: 0,
+            totalTiles: 0
+        };
+        this.idwCalculator.clearCache();
     }
     getIDWConfig() {
         return this.idwCalculator.getConfig();
@@ -111,5 +178,8 @@ export class IDWHeatmapLayer {
     }
     getPoints() {
         return [...this.points];
+    }
+    getInterpolationMode() {
+        return this.interpolationMode;
     }
 }
