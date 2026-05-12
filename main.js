@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing animation...');
+    
+    if (ScrollDebouncer.instance) ScrollDebouncer.instance = null;
+    if (AnimationController.instance) AnimationController.instance = null;
+    
     const scrollDebouncer = ScrollDebouncer.getInstance();
     const animationController = AnimationController.getInstance();
 
@@ -6,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const scene = document.getElementById('explosionScene');
     const shell = document.querySelector('.product-shell');
     const parts = document.querySelectorAll('.product-part');
+    
+    console.log('Found parts:', parts.length);
 
     const initialState = {
         shell: {
@@ -43,58 +50,66 @@ document.addEventListener('DOMContentLoaded', () => {
         ]
     };
 
-    animationController.addAnimation({
-        element: scene,
-        initial: {},
-        final: {},
-        update: (element, progress) => {
-            updateAnimation(progress);
-        }
-    });
-
     function updateAnimation(progress) {
-        const eased = animationController.easeInOutCubic(progress);
+        const clampedProgress = Math.max(0, Math.min(1, progress));
+        const eased = animationController.easeInOutCubic(clampedProgress);
 
-        const shellTransform = `
-            scale(${animationController.lerp(initialState.shell.scale, finalState.shell.scale, eased)})
-            translateZ(${animationController.lerp(initialState.shell.translateZ, finalState.shell.translateZ, eased)}px)
-            rotateX(${animationController.lerp(initialState.shell.rotateX, finalState.shell.rotateX, eased)}deg)
-            rotateY(${animationController.lerp(initialState.shell.rotateY, finalState.shell.rotateY, eased)}deg)
-        `;
-        shell.style.transform = shellTransform;
-        shell.style.opacity = animationController.lerp(initialState.shell.opacity, finalState.shell.opacity, eased);
+        const shellScale = animationController.lerp(initialState.shell.scale, finalState.shell.scale, eased);
+        const shellTZ = animationController.lerp(initialState.shell.translateZ, finalState.shell.translateZ, eased);
+        const shellRX = animationController.lerp(initialState.shell.rotateX, finalState.shell.rotateX, eased);
+        const shellRY = animationController.lerp(initialState.shell.rotateY, finalState.shell.rotateY, eased);
+        const shellOpacity = animationController.lerp(initialState.shell.opacity, finalState.shell.opacity, eased);
+
+        shell.style.transform = `scale(${shellScale}) translateZ(${shellTZ}px) rotateX(${shellRX}deg) rotateY(${shellRY}deg)`;
+        shell.style.opacity = shellOpacity;
 
         parts.forEach((part, index) => {
             const initial = initialState.parts[index];
             const final = finalState.parts[index];
 
-            const partTransform = `
-                translateZ(${animationController.lerp(initial.translateZ, final.translateZ, eased)}px)
-                translateX(${animationController.lerp(initial.translateX, final.translateX, eased)}px)
-                translateY(${animationController.lerp(initial.translateY, final.translateY, eased)}px)
-                rotateX(${animationController.lerp(initial.rotateX, final.rotateX, eased)}deg)
-                rotateY(${animationController.lerp(initial.rotateY, final.rotateY, eased)}deg)
-            `;
-            part.style.transform = partTransform;
-            part.style.opacity = animationController.lerp(initial.opacity, final.opacity, eased);
+            const pTZ = animationController.lerp(initial.translateZ, final.translateZ, eased);
+            const pTX = animationController.lerp(initial.translateX, final.translateX, eased);
+            const pTY = animationController.lerp(initial.translateY, final.translateY, eased);
+            const pRX = animationController.lerp(initial.rotateX, final.rotateX, eased);
+            const pRY = animationController.lerp(initial.rotateY, final.rotateY, eased);
+            const pOpacity = animationController.lerp(initial.opacity, final.opacity, eased);
+
+            part.style.transform = `translateZ(${pTZ}px) translateX(${pTX}px) translateY(${pTY}px) rotateX(${pRX}deg) rotateY(${pRY}deg)`;
+            part.style.opacity = pOpacity;
         });
     }
 
-    scrollDebouncer.onScroll((scrollY, progress) => {
-        const sectionProgress = calculateSectionProgress(scrollY);
-        animationController.update(sectionProgress);
-    });
+    updateAnimation(0);
+    console.log('Initial animation state set');
 
     function calculateSectionProgress(scrollY) {
         const sectionOffsetTop = animationSection.offsetTop;
-        const sectionHeight = animationSection.offsetHeight - window.innerHeight;
+        const sectionHeight = animationSection.offsetHeight;
+        const viewportHeight = window.innerHeight;
+        const availableScroll = sectionHeight - viewportHeight;
+
+        if (availableScroll <= 0) return 0;
 
         const relativeScroll = scrollY - sectionOffsetTop;
-        const progress = Math.max(0, Math.min(1, relativeScroll / sectionHeight));
-        return progress;
+        const progress = relativeScroll / availableScroll;
+        return Math.max(0, Math.min(1, progress));
     }
 
-    window.addEventListener('resize', () => {
-        scrollDebouncer.update();
+    scrollDebouncer.onScroll((scrollY, globalProgress) => {
+        const sectionProgress = calculateSectionProgress(scrollY);
+        console.log('Scroll - scrollY:', scrollY, 'sectionProgress:', sectionProgress.toFixed(3));
+        updateAnimation(sectionProgress);
     });
+
+    window.addEventListener('resize', () => {
+        const currentProgress = calculateSectionProgress(window.scrollY);
+        updateAnimation(currentProgress);
+    });
+    
+    console.log('Animation system initialized successfully!');
+    
+    window.testAnimation = function(progress) {
+        updateAnimation(progress);
+        console.log('Test animation at progress:', progress);
+    };
 });
