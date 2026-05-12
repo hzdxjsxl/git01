@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>智慧城市日照分析系统</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html, body {
+        width: 100%;
+        height: 100%;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        overflow: hidden;
+      }
+      #app {
+        width: 100%;
+        height: 100%;
+        display: flex;
+      }
+      #canvas-container {
+        flex: 1;
+        position: relative;
+      }
+      #renderCanvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .control-panel {
+        width: 360px;
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        padding: 24px;
+        color: #fff;
+        overflow-y: auto;
+      }
+      .control-panel h1 {
+        font-size: 20px;
+        margin-bottom: 8px;
+        color: #4fc3f7;
+      }
+      .control-panel h2 {
+        font-size: 14px;
+        margin-bottom: 20px;
+        color: #90a4ae;
+        font-weight: normal;
+      }
+      .section {
+        margin-bottom: 24px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+      }
+      .section-title {
+        font-size: 14px;
+        color: #4fc3f7;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .form-group {
+        margin-bottom: 16px;
+      }
+      .form-group label {
+        display: block;
+        font-size: 12px;
+        color: #90a4ae;
+        margin-bottom: 6px;
+      }
+      .form-group input,
+      .form-group select {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.3s;
+      }
+      .form-group input:focus,
+      .form-group select:focus {
+        border-color: #4fc3f7;
+      }
+      .form-row {
+        display: flex;
+        gap: 12px;
+      }
+      .form-row .form-group {
+        flex: 1;
+      }
+      .btn {
+        width: 100%;
+        padding: 12px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, #4fc3f7 0%, #29b6f6 100%);
+        color: #1a1a2e;
+      }
+      .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(79, 195, 247, 0.3);
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .stat-item {
+        padding: 12px;
+        background: rgba(79, 195, 247, 0.1);
+        border-radius: 6px;
+        text-align: center;
+      }
+      .stat-value {
+        font-size: 20px;
+        font-weight: bold;
+        color: #4fc3f7;
+      }
+      .stat-label {
+        font-size: 11px;
+        color: #90a4ae;
+        margin-top: 4px;
+      }
+      .loading {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: #4fc3f7;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-size: 14px;
+        display: none;
+      }
+      .building-list {
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      .building-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 13px;
+      }
+      .building-item:last-child {
+        border-bottom: none;
+      }
+      .building-name {
+        color: #e0e0e0;
+      }
+      .building-dim {
+        color: #78909c;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="canvas-container">
+        <canvas id="renderCanvas"></canvas>
+        <div id="loading" class="loading">加载中...</div>
+      </div>
+      <div class="control-panel">
+        <h1>智慧城市日照分析</h1>
+        <h2>Smart City Sunlight Analysis</h2>
+        
+        <div class="section">
+          <div class="section-title">📍 地理位置</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>经度 (°)</label>
+              <input type="number" id="longitude" value="116.4074" step="0.0001">
+            </div>
+            <div class="form-group">
+              <label>纬度 (°)</label>
+              <input type="number" id="latitude" value="39.9042" step="0.0001">
+            </div>
+          </div>
+        </div>
+        
+        <div class="section">
+          <div class="section-title">📅 日期与时间</div>
+          <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="date">
+          </div>
+          <div class="form-group">
+            <label>时间 (时:分)</label>
+            <input type="time" id="time" value="12:00">
+          </div>
+        </div>
+        
+        <button class="btn btn-primary" id="calculateBtn">计算日照</button>
+        
+        <div class="section" style="margin-top: 20px;">
+          <div class="section-title">☀️ 太阳位置</div>
+          <div class="stats-grid">
+            <div class="stat-item">
+              <div class="stat-value" id="altitude">--°</div>
+              <div class="stat-label">高度角</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="azimuth">--°</div>
+              <div class="stat-label">方位角</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="section">
+          <div class="section-title">📐 阴影面积统计</div>
+          <div class="stats-grid">
+            <div class="stat-item">
+              <div class="stat-value" id="shadowArea">--</div>
+              <div class="stat-label">阴影面积 (m²)</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value" id="shadowRatio">--</div>
+              <div class="stat-label">覆盖率 (%)</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="section">
+          <div class="section-title">🏢 园区建筑</div>
+          <div class="building-list" id="buildingList">
+            <div class="building-item">
+              <span class="building-name">加载中...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
