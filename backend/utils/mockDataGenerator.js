@@ -30,7 +30,22 @@ function generatePagePath(index, sessionPageIndex) {
     return '/home';
   }
   
-  const lastPage = PAGES[(sessionPageIndex - 1) % PAGES.length];
+  const sessionNum = Math.floor(index / 20);
+  const shouldCreateCycle = sessionNum % 5 === 0;
+  
+  if (shouldCreateCycle && sessionPageIndex >= 5) {
+    if (sessionPageIndex === 5) return '/products/list';
+    if (sessionPageIndex === 6) return '/products/detail';
+    if (sessionPageIndex === 7) return '/products/list';
+    if (sessionPageIndex === 8) return '/home';
+  }
+  
+  if (shouldCreateCycle && sessionPageIndex >= 10) {
+    if (sessionPageIndex === 10) return '/search';
+    if (sessionPageIndex === 11) return '/products/list';
+    if (sessionPageIndex === 12) return '/search';
+  }
+  
   const behaviorPattern = sessionPageIndex % 5;
   
   if (behaviorPattern === 0) {

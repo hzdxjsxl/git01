@@ -7,6 +7,9 @@
         <span>总Session数: {{ stats.totalSessions?.toLocaleString() || 0 }}</span>
         <span>节点数: {{ graphData.nodes?.length || 0 }}</span>
         <span>连接数: {{ graphData.links?.length || 0 }}</span>
+        <span v-if="stats.cyclesDetected > 0" class="cycle-warning">
+          ⚠️ 检测到循环: {{ stats.cyclesDetected }}, 已打破: {{ stats.cyclesBroken }}
+        </span>
       </div>
     </div>
     <svg ref="svgRef" :width="width" :height="height"></svg>
@@ -29,6 +32,8 @@ interface Props {
     links: GraphLink[];
     totalSessions: number;
     totalRecords: number;
+    cyclesBroken?: number;
+    cyclesDetected?: number;
   };
   width?: number;
   height?: number;
@@ -44,7 +49,9 @@ const svgRef = ref<SVGSVGElement | null>(null);
 
 const stats = computed(() => ({
   totalRecords: props.graphData?.totalRecords,
-  totalSessions: props.graphData?.totalSessions
+  totalSessions: props.graphData?.totalSessions,
+  cyclesDetected: props.graphData?.cyclesDetected || 0,
+  cyclesBroken: props.graphData?.cyclesBroken || 0
 }));
 
 const tooltip = ref({
@@ -326,6 +333,12 @@ onUnmounted(() => {
   gap: 24px;
   font-size: 13px;
   color: #666;
+  flex-wrap: wrap;
+}
+
+.cycle-warning {
+  color: #f59e0b !important;
+  font-weight: 500;
 }
 
 svg {
