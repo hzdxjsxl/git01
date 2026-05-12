@@ -17,7 +17,7 @@ export function Carousel3D({ items, itemWidth = 300, gap = 40 }) {
     prev
   } = useCarouselState(items.length, { itemWidth, gap })
 
-  const { handleStart, handleMove, handleEnd } = useGesture({
+  const { handleStart } = useGesture({
     onStart: handleDragStart,
     onMove: handleDragMove,
     onEnd: handleDragEnd
@@ -78,11 +78,6 @@ export function Carousel3D({ items, itemWidth = 300, gap = 40 }) {
             className="carousel-3d-track"
             onMouseDown={handleStart}
             onTouchStart={handleStart}
-            onMouseMove={handleMove}
-            onTouchMove={handleMove}
-            onMouseUp={handleEnd}
-            onMouseLeave={handleEnd}
-            onTouchEnd={handleEnd}
             style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
           >
             <div 

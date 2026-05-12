@@ -5,7 +5,7 @@ export function useCarouselState(itemCount, config = {}) {
   const { 
     itemWidth = 300, 
     gap = 40,
-    velocityMultiplier = 0.8,
+    velocityMultiplier = 1.2,
     snapThreshold = 0.3
   } = config
 
@@ -18,7 +18,7 @@ export function useCarouselState(itemCount, config = {}) {
   const [isDragging, setIsDragging] = useState(false)
 
   const physicsRef = useRef(new PhysicsEngine({
-    friction: 0.96,
+    friction: 0.98,
     bounceDamping: 0.6,
     springStiffness: 0.08
   }))
@@ -95,13 +95,14 @@ export function useCarouselState(itemCount, config = {}) {
   const handleDragEnd = useCallback((deltaX, _, positionHistory, timeHistory) => {
     setIsDragging(false)
     
-    const velocity = calculateVelocity(positionHistory, timeHistory) * velocityMultiplier
+    const rawVelocity = calculateVelocity(positionHistory, timeHistory)
+    const velocity = rawVelocity * velocityMultiplier
     
     physicsRef.current.setPosition(offset)
     physicsRef.current.setVelocity(velocity)
     physicsRef.current.setBounds(minOffset, maxOffset)
 
-    if (Math.abs(velocity) < 0.5) {
+    if (Math.abs(velocity) < 0.15) {
       snapToNearest()
       return
     }

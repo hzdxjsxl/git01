@@ -66,19 +66,15 @@ export class PhysicsEngine {
 export function calculateVelocity(positionHistory, timeHistory) {
   if (positionHistory.length < 2) return 0
 
-  const recentCount = Math.min(5, positionHistory.length)
-  let totalVelocity = 0
-
-  for (let i = 1; i < recentCount; i++) {
-    const deltaPos = positionHistory[positionHistory.length - i] - positionHistory[positionHistory.length - i - 1]
-    const deltaTime = timeHistory[timeHistory.length - i] - timeHistory[timeHistory.length - i - 1]
-    
-    if (deltaTime > 0) {
-      totalVelocity += deltaPos / deltaTime
-    }
-  }
-
-  return totalVelocity / (recentCount - 1)
+  const maxSampleCount = 8
+  const startIndex = Math.max(0, positionHistory.length - maxSampleCount)
+  const totalDeltaPos = positionHistory[positionHistory.length - 1] - positionHistory[startIndex]
+  const totalDeltaTime = timeHistory[timeHistory.length - 1] - timeHistory[startIndex]
+  
+  if (totalDeltaTime <= 0) return 0
+  
+  const velocityPerMs = totalDeltaPos / totalDeltaTime
+  return velocityPerMs * 16.6667
 }
 
 export function clamp(value, min, max) {
