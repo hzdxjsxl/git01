@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const shellTransform = `
             scale(${animationController.lerp(initialState.shell.scale, finalState.shell.scale, eased)})
             translateZ(${animationController.lerp(initialState.shell.translateZ, finalState.shell.translateZ, eased)}px)
-            rotateX(${animationController.lerp(initialState.shell.rotateX, finalState.shell.rotateY, eased)}deg)
+            rotateX(${animationController.lerp(initialState.shell.rotateX, finalState.shell.rotateX, eased)}deg)
             rotateY(${animationController.lerp(initialState.shell.rotateY, finalState.shell.rotateY, eased)}deg)
         `;
         shell.style.transform = shellTransform;
@@ -86,11 +86,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function calculateSectionProgress(scrollY) {
-        const sectionRect = animationSection.getBoundingClientRect();
-        const sectionTop = sectionRect.top + scrollY;
+        const sectionOffsetTop = animationSection.offsetTop;
         const sectionHeight = animationSection.offsetHeight - window.innerHeight;
 
-        const relativeScroll = scrollY - sectionTop;
+        const relativeScroll = scrollY - sectionOffsetTop;
         const progress = Math.max(0, Math.min(1, relativeScroll / sectionHeight));
         return progress;
     }
