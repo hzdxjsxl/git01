@@ -32,7 +32,7 @@ const LightningLogic = (() => {
             return baseAngle + Lightning.random(-variance, variance);
         }
 
-        generate(maxDepth = 3) {
+        generate(maxDepth = 3, maxHeight = 1000) {
             let currentX = this.startX;
             let currentY = this.startY;
             let currentAngle = Math.PI / 2;
@@ -52,11 +52,11 @@ const LightningLogic = (() => {
                 if (this.depth < maxDepth && Math.random() < 0.25) {
                     const branchAngle = Lightning.randomAngle(currentAngle, 1.2);
                     const branch = new Lightning(currentX, currentY, this.depth + 1);
-                    branch.generate(maxDepth - 1);
+                    branch.generate(maxDepth - 1, maxHeight);
                     this.branches.push(branch);
                 }
 
-                if (currentY > window.innerHeight + 0.9) {
+                if (currentY > maxHeight) {
                     break;
                 }
             }
@@ -97,21 +97,21 @@ const LightningLogic = (() => {
             this.nextLightning = Lightning.random(this.minInterval, this.maxInterval);
         }
 
-        spawn(width) {
+        spawn(width, height) {
             const startX = Lightning.random(50, width - 50);
             const startY = Lightning.random(0, 100);
             const lightning = new Lightning(startX, startY);
-            lightning.generate();
+            lightning.generate(3, height);
             this.lightnings.push(lightning);
             this.flashIntensity = 0.3;
         }
 
-        update(width, frameCount) {
+        update(width, height, frameCount) {
             this.flashIntensity *= 0.95;
             this.nextLightning--;
 
             if (this.nextLightning <= 0) {
-                this.spawn(width);
+                this.spawn(width, height);
                 this.scheduleNext();
             }
 

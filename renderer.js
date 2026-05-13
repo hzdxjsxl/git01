@@ -51,13 +51,13 @@ const LightningRenderer = (() => {
         }
 
         _drawSegments(segments) {
-            if (segments.length < 2) return;
+            if (segments.length < 1) return;
 
             this.ctx.beginPath();
             this.ctx.moveTo(segments[0].x, segments[0].y);
 
-            for (let i = 1; i < segments.length; i++) {
-                this.ctx.lineTo(segments[i].x, segments[i].y);
+            for (let i = 0; i < segments.length; i++) {
+                this.ctx.lineTo(segments[i].endX, segments[i].endY);
             }
 
             this.ctx.stroke();

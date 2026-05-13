@@ -6,7 +6,7 @@ const app = (() => {
 
     function animate() {
         frameCount++;
-        thunderstorm.update(canvas.width, frameCount);
+        thunderstorm.update(canvas.width, canvas.height, frameCount);
         renderer.render(thunderstorm);
         requestAnimationFrame(animate);
     }
