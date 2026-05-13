@@ -5,7 +5,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, defineExpose } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, defineExpose } from 'vue'
 import { HeatmapEngine } from '../utils/heatmapEngine.js'
 import { PitchRenderer } from '../utils/pitchRenderer.js'
 
@@ -35,22 +35,22 @@ let totalPoints = 0
 const PITCH_WIDTH = 100
 const PITCH_HEIGHT = 68
 
-const scaleX = () => canvasRef.value.width / PITCH_WIDTH
-const scaleY = () => canvasRef.value.height / PITCH_HEIGHT
+const scaleX = () => canvasRef.value ? canvasRef.value.width / (window.devicePixelRatio || 1) / PITCH_WIDTH : 1
+const scaleY = () => canvasRef.value ? canvasRef.value.height / (window.devicePixelRatio || 1) / PITCH_HEIGHT : 1
 
 const connectWebSocket = () => {
   const wsUrl = `ws://localhost:${props.backendPort}/ws`
-  console.log(`尝试连接到: ${wsUrl}`)
+  console.log('[Heatmap] 尝试连接到 WebSocket:', wsUrl)
   
   try {
     ws = new WebSocket(wsUrl)
   } catch (e) {
-    console.error('WebSocket 创建失败:', e)
+    console.error('[Heatmap] WebSocket 创建失败:', e)
     return
   }
 
   ws.onopen = () => {
-    console.log('WebSocket 连接成功')
+    console.log('[Heatmap] WebSocket 连接成功')
     isConnected = true
     emit('update:status', { connected: true })
   }
@@ -67,12 +67,12 @@ const connectWebSocket = () => {
       
       emit('update:status', { totalPoints })
     } catch (e) {
-      console.error('解析数据失败:', e)
+      console.error('[Heatmap] 解析数据失败:', e)
     }
   }
 
   ws.onclose = () => {
-    console.log('WebSocket 连接关闭')
+    console.log('[Heatmap] WebSocket 连接关闭')
     isConnected = false
     emit('update:status', { connected: false })
     
@@ -84,21 +84,34 @@ const connectWebSocket = () => {
   }
 
   ws.onerror = (error) => {
-    console.error('WebSocket 错误:', error)
+    console.error('[Heatmap] WebSocket 错误:', error)
   }
 }
 
 const resizeCanvas = () => {
-  if (!containerRef.value || !canvasRef.value) return
+  if (!containerRef.value || !canvasRef.value) {
+    console.warn('[Heatmap] resizeCanvas: 元素未就绪', {
+      container: containerRef.value,
+      canvas: canvasRef.value
+    })
+    return false
+  }
 
   const container = containerRef.value
   const canvas = canvasRef.value
 
-  const aspectRatio = PITCH_WIDTH / PITCH_HEIGHT
-  const containerWidth = container.clientWidth
-  const containerHeight = container.clientHeight
+  let containerWidth = container.clientWidth
+  let containerHeight = container.clientHeight
 
+  if (containerWidth <= 0 || containerHeight <= 0) {
+    containerWidth = 800
+    containerHeight = 544
+    console.warn('[Heatmap] 容器尺寸无效，使用默认尺寸 800x544')
+  }
+
+  const aspectRatio = PITCH_WIDTH / PITCH_HEIGHT
   let width, height
+
   if (containerWidth / containerHeight > aspectRatio) {
     height = containerHeight
     width = height * aspectRatio
@@ -108,19 +121,33 @@ const resizeCanvas = () => {
   }
 
   const dpr = window.devicePixelRatio || 1
-  canvas.width = width * dpr
-  canvas.height = height * dpr
+  canvas.width = Math.max(1, Math.floor(width * dpr))
+  canvas.height = Math.max(1, Math.floor(height * dpr))
   canvas.style.width = `${width}px`
   canvas.style.height = `${height}px`
 
   ctx = canvas.getContext('2d')
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.scale(dpr, dpr)
+
+  console.log('[Heatmap] Canvas 尺寸:', {
+    logical: `${width.toFixed(0)}x${height.toFixed(0)}`,
+    physical: `${canvas.width}x${canvas.height}`,
+    dpr
+  })
+
+  return true
 }
 
 const drawPlayers = (players) => {
+  if (!ctx || players.length === 0) return
+
+  const sx = scaleX()
+  const sy = scaleY()
+
   for (const player of players) {
-    const px = player.x * scaleX()
-    const py = player.y * scaleY()
+    const px = player.x * sx
+    const py = player.y * sy
     const radius = 8
 
     const gradient = ctx.createRadialGradient(px, py, 0, px, py, radius * 2)
@@ -150,12 +177,29 @@ const drawPlayers = (players) => {
 }
 
 const renderLoop = () => {
-  if (!ctx || !canvasRef.value) return
+  if (!ctx) {
+    resizeCanvas()
+    if (!ctx) {
+      console.warn('[Heatmap] renderLoop: ctx 仍为 null，跳过帧')
+      animationId = requestAnimationFrame(renderLoop)
+      return
+    }
+  }
 
-  const width = canvasRef.value.width / (window.devicePixelRatio || 1)
-  const height = canvasRef.value.height / (window.devicePixelRatio || 1)
+  const canvas = canvasRef.value
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+    resizeCanvas()
+    animationId = requestAnimationFrame(renderLoop)
+    return
+  }
 
-  ctx.clearRect(0, 0, width, height)
+  const dpr = window.devicePixelRatio || 1
+  const width = canvas.width / dpr
+  const height = canvas.height / dpr
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
   pitchRenderer.drawPitch(ctx, width, height)
   heatmapEngine.render(ctx, width, height)
@@ -182,12 +226,30 @@ const clearHeatmap = () => {
 
 defineExpose({ clearHeatmap })
 
-onMounted(() => {
+onMounted(async () => {
+  console.log('[Heatmap] 组件 mounted')
+  
   heatmapEngine = new HeatmapEngine()
   pitchRenderer = new PitchRenderer()
 
-  resizeCanvas()
+  await nextTick()
+  console.log('[Heatmap] nextTick 后，检查元素:', {
+    container: containerRef.value,
+    canvas: canvasRef.value
+  })
+
+  const resized = resizeCanvas()
+  console.log('[Heatmap] 初始 resizeCanvas 结果:', resized)
+
   window.addEventListener('resize', resizeCanvas)
+
+  setTimeout(() => {
+    console.log('[Heatmap] 延迟再次检查容器尺寸:', {
+      width: containerRef.value?.clientWidth,
+      height: containerRef.value?.clientHeight
+    })
+    resizeCanvas()
+  }, 100)
 
   connectWebSocket()
   renderLoop()
@@ -210,6 +272,8 @@ onUnmounted(() => {
 .heatmap-container {
   width: 100%;
   height: 100%;
+  min-width: 400px;
+  min-height: 272px;
   display: flex;
   align-items: center;
   justify-content: center;

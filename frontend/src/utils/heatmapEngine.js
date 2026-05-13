@@ -74,8 +74,8 @@ export class HeatmapEngine {
     const cellHeight = height / this.gridHeight;
     const maxDensity = this.getMaxDensity();
 
-    const imageData = ctx.createImageData(width, height);
-    const data = imageData.data;
+    const prevComposite = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'source-over';
 
     for (let gy = 0; gy < this.gridHeight; gy++) {
       for (let gx = 0; gx < this.gridWidth; gx++) {
@@ -85,35 +85,42 @@ export class HeatmapEngine {
         const normalized = Math.min(density / maxDensity, 1);
         const color = this.getColor(normalized);
 
-        const startX = Math.floor(gx * cellWidth);
-        const startY = Math.floor(gy * cellHeight);
-        const endX = Math.min(startX + Math.ceil(cellWidth), width);
-        const endY = Math.min(startY + Math.ceil(cellHeight), height);
+        const x = gx * cellWidth;
+        const y = gy * cellHeight;
 
-        for (let py = startY; py < endY; py++) {
-          for (let px = startX; px < endX; px++) {
-            const idx = (py * width + px) * 4;
-            data[idx] = color.r;
-            data[idx + 1] = color.g;
-            data[idx + 2] = color.b;
-            data[idx + 3] = color.a;
-          }
-        }
+        ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a / 255})`;
+        ctx.fillRect(x, y, cellWidth + 1, cellHeight + 1);
       }
     }
 
-    ctx.putImageData(imageData, 0, 0);
+    ctx.globalCompositeOperation = prevComposite;
   }
 
   getColor(value) {
     if (value < 0.25) {
-      return this.interpolateColor({ r: 0, g: 0, b: 255, a: 0 }, { r: 0, g: 100, b: 255, a: 150 }, value * 4);
+      return this.interpolateColor(
+        { r: 0, g: 0, b: 255, a: 0 },
+        { r: 0, g: 100, b: 255, a: 180 },
+        value * 4
+      );
     } else if (value < 0.5) {
-      return this.interpolateColor({ r: 0, g: 100, b: 255, a: 150 }, { r: 0, g: 255, b: 255, a: 200 }, (value - 0.25) * 4);
+      return this.interpolateColor(
+        { r: 0, g: 100, b: 255, a: 180 },
+        { r: 0, g: 255, b: 255, a: 200 },
+        (value - 0.25) * 4
+      );
     } else if (value < 0.75) {
-      return this.interpolateColor({ r: 0, g: 255, b: 255, a: 200 }, { r: 255, g: 255, b: 0, a: 230 }, (value - 0.5) * 4);
+      return this.interpolateColor(
+        { r: 0, g: 255, b: 255, a: 200 },
+        { r: 255, g: 255, b: 0, a: 220 },
+        (value - 0.5) * 4
+      );
     } else {
-      return this.interpolateColor({ r: 255, g: 255, b: 0, a: 230 }, { r: 255, g: 50, b: 0, a: 255 }, (value - 0.75) * 4);
+      return this.interpolateColor(
+        { r: 255, g: 255, b: 0, a: 220 },
+        { r: 255, g: 50, b: 0, a: 230 },
+        (value - 0.75) * 4
+      );
     }
   }
 

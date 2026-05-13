@@ -9,102 +9,134 @@ export class PitchRenderer {
   }
 
   drawPitch(ctx, width, height) {
+    console.log('[PitchRenderer] drawPitch called with:', width, 'x', height);
+
     const scaleX = width / PITCH_WIDTH;
     const scaleY = height / PITCH_HEIGHT;
 
     this.drawGrass(ctx, width, height);
-    this.drawBoundaries(ctx, scaleX, scaleY);
-    this.drawCenterCircle(ctx, scaleX, scaleY);
-    this.drawCenterLine(ctx, width, scaleY);
-    this.drawPenaltyAreas(ctx, scaleX, scaleY);
-    this.drawGoalAreas(ctx, scaleX, scaleY);
-    this.drawPenaltySpots(ctx, scaleX, scaleY);
-    this.drawGoals(ctx, scaleX, scaleY);
+    this.drawBoundaries(ctx, width, height);
+    this.drawCenterLine(ctx, width, height);
+    this.drawCenterCircle(ctx, width, height, scaleX, scaleY);
+    this.drawPenaltyAreas(ctx, width, height, scaleX, scaleY);
+    this.drawGoalAreas(ctx, width, height, scaleX, scaleY);
+    this.drawPenaltySpots(ctx, width, height, scaleX, scaleY);
+    this.drawGoals(ctx, width, height, scaleX, scaleY);
   }
 
   drawGrass(ctx, width, height) {
-    const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, '#228b44');
-    gradient.addColorStop(0.5, '#1e7a3e');
-    gradient.addColorStop(1, '#196b33');
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#2d8b4f');
+    gradient.addColorStop(0.5, '#228b44');
+    gradient.addColorStop(1, '#1e7a3e');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    const stripeWidth = width / 20;
-    for (let i = 0; i < 20; i++) {
+    const stripeCount = 10;
+    const stripeWidth = width / stripeCount;
+    for (let i = 0; i < stripeCount; i++) {
       if (i % 2 === 1) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
         ctx.fillRect(i * stripeWidth, 0, stripeWidth, height);
       }
     }
   }
 
-  drawBoundaries(ctx, scaleX, scaleY) {
+  drawBoundaries(ctx, width, height) {
     ctx.strokeStyle = this.lineColor;
     ctx.lineWidth = this.lineWidth;
-    ctx.strokeRect(0, 0, PITCH_WIDTH * scaleX, PITCH_HEIGHT * scaleY);
-  }
-
-  drawCenterCircle(ctx, scaleX, scaleY) {
     ctx.beginPath();
-    ctx.arc(PITCH_WIDTH / 2 * scaleX, PITCH_HEIGHT / 2 * scaleY, 9.15 * Math.min(scaleX, scaleY), 0, Math.PI * 2);
+    ctx.rect(this.lineWidth / 2, this.lineWidth / 2, width - this.lineWidth, height - this.lineWidth);
     ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(PITCH_WIDTH / 2 * scaleX, PITCH_HEIGHT / 2 * scaleY, 3, 0, Math.PI * 2);
-    ctx.fillStyle = this.lineColor;
-    ctx.fill();
   }
 
-  drawCenterLine(ctx, width, scaleY) {
+  drawCenterLine(ctx, width, height) {
+    ctx.strokeStyle = this.lineColor;
+    ctx.lineWidth = this.lineWidth;
     ctx.beginPath();
     ctx.moveTo(width / 2, 0);
-    ctx.lineTo(width / 2, PITCH_HEIGHT * scaleY);
+    ctx.lineTo(width / 2, height);
     ctx.stroke();
   }
 
-  drawPenaltyAreas(ctx, scaleX, scaleY) {
+  drawCenterCircle(ctx, width, height, scaleX, scaleY) {
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = 9.15 * Math.min(scaleX, scaleY);
+
+    ctx.strokeStyle = this.lineColor;
+    ctx.lineWidth = this.lineWidth;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = this.lineColor;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawPenaltyAreas(ctx, width, height, scaleX, scaleY) {
     const boxWidth = 16.5 * scaleX;
     const boxHeight = 40.32 * scaleY;
-    const yOffset = (PITCH_HEIGHT * scaleY - boxHeight) / 2;
+    const yOffset = (height - boxHeight) / 2;
 
-    ctx.strokeRect(0, yOffset, boxWidth, boxHeight);
-    ctx.strokeRect(PITCH_WIDTH * scaleX - boxWidth, yOffset, boxWidth, boxHeight);
+    ctx.strokeStyle = this.lineColor;
+    ctx.lineWidth = this.lineWidth;
+
+    ctx.beginPath();
+    ctx.rect(0, yOffset, boxWidth, boxHeight);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.rect(width - boxWidth, yOffset, boxWidth, boxHeight);
+    ctx.stroke();
   }
 
-  drawGoalAreas(ctx, scaleX, scaleY) {
+  drawGoalAreas(ctx, width, height, scaleX, scaleY) {
     const boxWidth = 5.5 * scaleX;
     const boxHeight = 18.32 * scaleY;
-    const yOffset = (PITCH_HEIGHT * scaleY - boxHeight) / 2;
+    const yOffset = (height - boxHeight) / 2;
 
-    ctx.strokeRect(0, yOffset, boxWidth, boxHeight);
-    ctx.strokeRect(PITCH_WIDTH * scaleX - boxWidth, yOffset, boxWidth, boxHeight);
+    ctx.strokeStyle = this.lineColor;
+    ctx.lineWidth = this.lineWidth;
+
+    ctx.beginPath();
+    ctx.rect(0, yOffset, boxWidth, boxHeight);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.rect(width - boxWidth, yOffset, boxWidth, boxHeight);
+    ctx.stroke();
   }
 
-  drawPenaltySpots(ctx, scaleX, scaleY) {
-    const spotY = PITCH_HEIGHT / 2 * scaleY;
-    
-    ctx.beginPath();
-    ctx.arc(11 * scaleX, spotY, 3, 0, Math.PI * 2);
+  drawPenaltySpots(ctx, width, height, scaleX, scaleY) {
+    const spotY = height / 2;
+
     ctx.fillStyle = this.lineColor;
+    ctx.beginPath();
+    ctx.arc(11 * scaleX, spotY, 4, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.beginPath();
-    ctx.arc((PITCH_WIDTH - 11) * scaleX, spotY, 3, 0, Math.PI * 2);
+    ctx.arc(width - 11 * scaleX, spotY, 4, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  drawGoals(ctx, scaleX, scaleY) {
+  drawGoals(ctx, width, height, scaleX, scaleY) {
     const goalHeight = 7.32 * scaleY;
     const goalDepth = 2 * scaleX;
-    const goalY = (PITCH_HEIGHT * scaleY - goalHeight) / 2;
+    const goalY = (height - goalHeight) / 2;
 
     ctx.strokeStyle = this.lineColor;
     ctx.lineWidth = 3;
 
-    ctx.strokeRect(-goalDepth, goalY, goalDepth, goalHeight);
-    ctx.strokeRect(PITCH_WIDTH * scaleX, goalY, goalDepth, goalHeight);
+    ctx.beginPath();
+    ctx.rect(-goalDepth, goalY, goalDepth, goalHeight);
+    ctx.stroke();
 
-    ctx.lineWidth = this.lineWidth;
+    ctx.beginPath();
+    ctx.rect(width, goalY, goalDepth, goalHeight);
+    ctx.stroke();
   }
 }
