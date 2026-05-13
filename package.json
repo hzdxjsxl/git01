@@ -1,0 +1,13 @@
+{
+  "name": "fullstack-diff-tool",
+  "version": "1.0.0",
+  "description": "Full-stack large-scale text diff tool with React frontend and Python backend",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "install:all": "pip install -r requirements.txt && cd frontend && npm install",
+    "dev:backend": "python backend/app.py",
+    "dev:frontend": "cd frontend && npm run dev"
+  }
+}
