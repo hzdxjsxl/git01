@@ -5,6 +5,125 @@ export const OperationType = {
   REPLACE: 'replace'
 };
 
+function shortestEditDistance(oldLines, newLines, a, b, c, d, vf, vb) {
+  const n = b - a;
+  const m = d - c;
+  const max = n + m;
+  
+  const kOffset = max;
+  const delta = n - m;
+  const even = (delta & 1) === 1;
+  
+  for (let i = 0; i < vf.length; i++) {
+    vf[i] = -1;
+    vb[i] = -1;
+  }
+  
+  vf[kOffset + 1] = 0;
+  vb[kOffset + delta - 1] = n;
+  
+  for (let D = 0; D <= max; D++) {
+    for (let k = -D; k <= D; k += 2) {
+      let x;
+      const kIdx = k + kOffset;
+      
+      if (k === -D || (k !== D && vf[kIdx - 1] < vf[kIdx + 1])) {
+        x = vf[kIdx + 1];
+      } else {
+        x = vf[kIdx - 1] + 1;
+      }
+      
+      let y = x - k;
+      
+      while (x < n && y < m && oldLines[a + x] === newLines[c + y]) {
+        x++;
+        y++;
+      }
+      
+      vf[kIdx] = x;
+      
+      if (even && k >= delta - (D - 1) && k <= delta + (D - 1) && vf[kIdx] >= vb[kIdx]) {
+        return { D, x: x + a, y: y + c, k };
+      }
+    }
+    
+    for (let k = -D; k <= D; k += 2) {
+      const k2 = k + delta;
+      const kIdx = k2 + kOffset;
+      
+      let x;
+      if (k === D || (k !== -D && vb[kIdx - 1] < vb[kIdx + 1])) {
+        x = vb[kIdx - 1];
+      } else {
+        x = vb[kIdx + 1] - 1;
+      }
+      
+      let y = x - k2;
+      
+      while (x > 0 && y > 0 && oldLines[a + x - 1] === newLines[c + y - 1]) {
+        x--;
+        y--;
+      }
+      
+      vb[kIdx] = x;
+      
+      if (!even && k2 >= -D && k2 <= D && vb[kIdx] <= vf[k2 + kOffset]) {
+        return { D: 2 * D + 1, x: x + a, y: y + c, k: k2 };
+      }
+    }
+  }
+  
+  return { D: 0, x: a, y: c, k: 0 };
+}
+
+function lcs(oldLines, newLines, a, b, c, d, operations, vf, vb) {
+  while (a < b && c < d && oldLines[a] === newLines[c]) {
+    operations.push({
+      type: OperationType.EQUAL,
+      oldLine: oldLines[a],
+      newLine: newLines[c],
+      oldIndex: a,
+      newIndex: c
+    });
+    a++;
+    c++;
+  }
+  
+  while (a < b && c < d && oldLines[b - 1] === newLines[d - 1]) {
+    b--;
+    d--;
+  }
+  
+  if (a < b && c < d) {
+    const middle = shortestEditDistance(oldLines, newLines, a, b, c, d, vf, vb);
+    
+    if (middle.D > 0) {
+      lcs(oldLines, newLines, a, middle.x, c, middle.y, operations, vf, vb);
+      lcs(oldLines, newLines, middle.x, b, middle.y, d, operations, vf, vb);
+    }
+  } else if (a < b) {
+    for (let i = a; i < b; i++) {
+      operations.push({
+        type: OperationType.DELETE,
+        oldLine: oldLines[i],
+        newLine: null,
+        oldIndex: i,
+        newIndex: null
+      });
+    }
+  } else if (c < d) {
+    for (let i = c; i < d; i++) {
+      operations.push({
+        type: OperationType.INSERT,
+        oldLine: null,
+        newLine: newLines[i],
+        oldIndex: null,
+        newIndex: i
+      });
+    }
+  }
+}
+
 export function computeDiff(oldText, newText) {
   const oldLines = oldText.split('\n');
   const newLines = newText.split('\n');
@@ -12,114 +131,26 @@ export function computeDiff(oldText, newText) {
   const n = oldLines.length;
   const m = newLines.length;
   
-  const max = n + m;
+  const max = Math.max(n, m) * 2;
+  const vf = new Int32Array(2 * max + 1);
+  const vb = new Int32Array(2 * max + 1);
   
-  const v = new Array(2 * max + 1);
-  const trace = [];
+  const operations = [];
   
-  let found = false;
+  lcs(oldLines, newLines, 0, n, 0, m, operations, vf, vb);
   
-  for (let d = 0; d <= max; d++) {
-    const vCopy = [...v];
-    trace.push(vCopy);
-    
-    for (let k = -d; k <= d; k += 2) {
-      let x;
-      
-      if (k === -d || (k !== d && v[k - 1 + max] < v[k + 1 + max])) {
-        x = v[k + 1 + max] || 0;
-      } else {
-        x = (v[k - 1 + max] || 0) + 1;
-      }
-      
-      let y = x - k;
-      
-      while (x < n && y < m && oldLines[x] === newLines[y]) {
-        x++;
-        y++;
-      }
-      
-      v[k + max] = x;
-      
-      if (x >= n && y >= m) {
-        found = true;
-        break;
-      }
-    }
-    
-    if (found) break;
-  }
-  
-  const operations = backtrack(trace, oldLines, newLines);
+  const merged = mergeReplacements(operations);
   
   return {
-    operations,
+    operations: merged,
     stats: {
       oldLines: n,
       newLines: m,
-      insertions: operations.filter(o => o.type === OperationType.INSERT).length,
-      deletions: operations.filter(o => o.type === OperationType.DELETE).length,
-      equals: operations.filter(o => o.type === OperationType.EQUAL).length
+      insertions: merged.filter(o => o.type === OperationType.INSERT).length,
+      deletions: merged.filter(o => o.type === OperationType.DELETE).length,
+      equals: merged.filter(o => o.type === OperationType.EQUAL).length
     }
   };
-}
-
-function backtrack(trace, oldLines, newLines) {
-  const operations = [];
-  let x = oldLines.length;
-  let y = newLines.length;
-  const max = oldLines.length + newLines.length;
-  
-  for (let d = trace.length - 1; d >= 0; d--) {
-    const v = trace[d];
-    const k = x - y;
-    
-    let prevK;
-    if (k === -d || (k !== d && (v[k - 1 + max] || 0) < (v[k + 1 + max] || 0))) {
-      prevK = k + 1;
-    } else {
-      prevK = k - 1;
-    }
-    
-    const prevX = v[prevK + max] || 0;
-    const prevY = prevX - prevK;
-    
-    while (x > prevX && y > prevY) {
-      operations.unshift({
-        type: OperationType.EQUAL,
-        oldLine: oldLines[x - 1],
-        newLine: newLines[y - 1],
-        oldIndex: x - 1,
-        newIndex: y - 1
-      });
-      x--;
-      y--;
-    }
-    
-    if (d > 0) {
-      if (prevK === k - 1) {
-        operations.unshift({
-          type: OperationType.DELETE,
-          oldLine: oldLines[x - 1],
-          newLine: null,
-          oldIndex: x - 1,
-          newIndex: null
-        });
-        x--;
-      } else {
-        operations.unshift({
-          type: OperationType.INSERT,
-          oldLine: null,
-          newLine: newLines[y - 1],
-          oldIndex: null,
-          newIndex: y - 1
-        });
-        y--;
-      }
-    }
-  }
-  
-  return mergeReplacements(operations);
 }
 
 function mergeReplacements(operations) {
