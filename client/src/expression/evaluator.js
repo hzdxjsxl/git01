@@ -37,6 +37,9 @@ class Evaluator {
   }
 
   getProductField(product, fieldName) {
+    if (fieldName === 'tag') {
+      return product.tags || [];
+    }
     if (fieldName in product) {
       return product[fieldName];
     }
@@ -61,6 +64,18 @@ class Evaluator {
   evaluateComparison(node, product) {
     const left = this.evaluateNode(node.left, product);
     const right = this.evaluateNode(node.right, product);
+
+    if (Array.isArray(left)) {
+      const contains = left.includes(right);
+      switch (node.operator) {
+        case '==':
+          return contains;
+        case '!=':
+          return !contains;
+        default:
+          return false;
+      }
+    }
 
     switch (node.operator) {
       case '>':

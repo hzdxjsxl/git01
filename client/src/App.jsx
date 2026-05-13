@@ -17,8 +17,9 @@ function App() {
         setProducts(data.products);
         setPresets(data.rules);
         if (data.rules.length > 0) {
-          setExpression(data.rules[0].expression);
-          setSelectedPresetId(data.rules[0].id);
+          const vipRule = data.rules.find(r => r.expression.includes("tag == 'VIP'")) || data.rules[1];
+          setExpression(vipRule.expression);
+          setSelectedPresetId(vipRule.id);
         }
         setLoading(false);
       } catch (e) {
