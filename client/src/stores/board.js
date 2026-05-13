@@ -97,16 +97,12 @@ export const useBoardStore = defineStore('board', () => {
   }
 
   function setPixel(x, y, color, broadcast = true) {
-    const idx = y * BOARD_WIDTH + x
-    if (x < 0 || x >= BOARD_WIDTH || y < 0 || y >= BOARD_HEIGHT) return
-    if (pixels.value[idx] === color) return
-
-    const oldColor = pixels.value[idx]
-    pixels.value[idx] = color
+    const revertChanges = applyChanges([{ x, y, color }])
+    if (revertChanges.length === 0) return
 
     pushHistory(
       [{ x, y, color }],
-      [{ x, y, color: oldColor }]
+      revertChanges
     )
 
     if (broadcast && ws.value && ws.value.readyState === WebSocket.OPEN) {

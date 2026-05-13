@@ -32,15 +32,27 @@ function render() {
       const r = pixelBytes[byteIdx]
       const g = pixelBytes[byteIdx + 1]
       const b = pixelBytes[byteIdx + 2]
-      const a = pixelBytes[byteIdx + 3] || 255
+      const a = pixelBytes[byteIdx + 3]
+
+      let drawR = 255
+      let drawG = 255
+      let drawB = 255
+      let drawA = 255
+
+      if (a > 0) {
+        drawR = r
+        drawG = g
+        drawB = b
+        drawA = a
+      }
 
       for (let py = 0; py < PIXEL_SIZE; py++) {
         for (let px = 0; px < PIXEL_SIZE; px++) {
           const idx = ((y * PIXEL_SIZE + py) * canvasRef.value.width + (x * PIXEL_SIZE + px)) * 4
-          data[idx] = r
-          data[idx + 1] = g
-          data[idx + 2] = b
-          data[idx + 3] = a
+          data[idx] = drawR
+          data[idx + 1] = drawG
+          data[idx + 2] = drawB
+          data[idx + 3] = drawA
         }
       }
     }
