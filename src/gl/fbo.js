@@ -33,6 +33,10 @@ export class PingPongFBO {
         return this.framebuffers[this.currentIndex];
     }
     
+    getNextFramebuffer() {
+        return this.framebuffers[this.currentIndex === 0 ? 1 : 0];
+    }
+    
     swap() {
         this.currentIndex = this.currentIndex === 0 ? 1 : 0;
     }

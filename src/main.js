@@ -23,8 +23,39 @@ class WaterRipple {
         this.createPrograms();
         this.createBuffers();
         this.createFBOs();
+        this.initializeHeightMaps();
         this.setupEventListeners();
         this.animate();
+    }
+    
+    initializeHeightMaps() {
+        const gl = this.webgl.gl;
+        const size = this.simulationSize * this.simulationSize * 4;
+        const initialData = new Uint8Array(size);
+        const baseValue = Math.floor(0.5 * 255);
+        
+        for (let i = 0; i < size; i += 4) {
+            initialData[i] = baseValue;
+            initialData[i + 1] = baseValue;
+            initialData[i + 2] = baseValue;
+            initialData[i + 3] = 255;
+        }
+        
+        for (let i = 0; i < 2; i++) {
+            const texture = this.heightMapFBO.textures[i];
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(
+                gl.TEXTURE_2D,
+                0,
+                gl.RGBA,
+                this.simulationSize,
+                this.simulationSize,
+                0,
+                gl.RGBA,
+                gl.UNSIGNED_BYTE,
+                initialData
+            );
+        }
     }
     
     resize() {
@@ -125,21 +156,25 @@ class WaterRipple {
         const gl = this.webgl.gl;
         const program = this.simulationProgram;
         
+        const currentTexture = this.heightMapFBO.getCurrentTexture();
+        const previousTexture = this.heightMapFBO.getPreviousTexture();
+        const nextFramebuffer = this.heightMapFBO.getNextFramebuffer();
+        
         this.webgl.useProgram(program);
         this.setupVertexAttributes(program);
         
         this.webgl.bindFramebuffer(
-            this.heightMapFBO.getCurrentFramebuffer(),
+            nextFramebuffer,
             this.simulationSize,
             this.simulationSize
         );
         
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.heightMapFBO.getCurrentTexture());
+        gl.bindTexture(gl.TEXTURE_2D, currentTexture);
         this.webgl.setUniform1i(program, 'u_currentHeight', 0);
         
         gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, this.heightMapFBO.getPreviousTexture());
+        gl.bindTexture(gl.TEXTURE_2D, previousTexture);
         this.webgl.setUniform1i(program, 'u_previousHeight', 1);
         
         this.webgl.setUniform2f(program, 'u_resolution', this.simulationSize, this.simulationSize);
