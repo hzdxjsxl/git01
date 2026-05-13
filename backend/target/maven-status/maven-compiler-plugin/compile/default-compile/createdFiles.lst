@@ -1,0 +1,3 @@
+com\smart\home\config\WebConfig.class
+com\smart\home\controller\EnergyController.class
+com\smart\home\HomeEnergyOptimizerApplication.class
