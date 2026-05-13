@@ -1,0 +1,376 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: #f5f7fa;
+  color: #1f2937;
+  line-height: 1.6;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 24px;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+}
+
+.app-header h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.app-header p {
+  opacity: 0.9;
+  font-size: 14px;
+}
+
+.app-content {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 24px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.panel {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rule-editor {
+  margin-bottom: 20px;
+}
+
+.rule-editor textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 14px;
+  resize: vertical;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.rule-editor textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.rule-editor textarea.has-error {
+  border-color: #ef4444;
+}
+
+.error-message {
+  color: #ef4444;
+  font-size: 13px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border-radius: 6px;
+  border-left: 3px solid #ef4444;
+}
+
+.presets-section {
+  margin-top: 20px;
+}
+
+.presets-section h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preset-item {
+  padding: 10px 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-item:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.preset-item.selected {
+  background: #eef2ff;
+  border-color: #667eea;
+}
+
+.preset-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #374151;
+}
+
+.preset-expression {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.debug-section {
+  margin-top: 20px;
+}
+
+.debug-section h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.debug-box {
+  background: #1f2937;
+  color: #d1d5db;
+  padding: 12px;
+  border-radius: 8px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.help-section {
+  margin-top: 20px;
+  padding: 16px;
+  background: #f0fdf4;
+  border-radius: 8px;
+  border: 1px solid #bbf7d0;
+}
+
+.help-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #166534;
+  margin-bottom: 8px;
+}
+
+.help-section ul {
+  list-style: none;
+  font-size: 13px;
+  color: #15803d;
+}
+
+.help-section li {
+  padding: 4px 0;
+}
+
+.help-section code {
+  background: #dcfce7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.products-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.stats {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.stats strong {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.product-card {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.3s;
+}
+
+.product-card.matched {
+  border-color: #10b981;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.product-card.unmatched {
+  opacity: 0.6;
+}
+
+.product-card.matched .product-name {
+  color: #065f46;
+}
+
+.product-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.product-id {
+  font-size: 11px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.product-price {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ef4444;
+}
+
+.product-card.matched .product-price {
+  color: #059669;
+}
+
+.product-price::before {
+  content: '¥';
+  font-size: 14px;
+  margin-right: 2px;
+}
+
+.product-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 12px;
+}
+
+.product-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.meta-item {
+  font-size: 12px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.product-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.tag.vip {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.tag.electronics {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.tag.fashion {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.tag.home {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.tag.new {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.match-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.match-badge.matched {
+  background: #10b981;
+  color: white;
+}
+
+.match-badge.matched::before {
+  content: '✓';
+  margin-right: 4px;
+}
+
+.match-badge.unmatched {
+  background: #e5e7eb;
+  color: #6b7280;
+}
+
+.match-badge.unmatched::before {
+  content: '✗';
+  margin-right: 4px;
+}
+
+@media (max-width: 1024px) {
+  .app-content {
+    grid-template-columns: 1fr;
+  }
+}

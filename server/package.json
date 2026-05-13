@@ -1,0 +1,6 @@
+{
+  "name": "promotion-server",
+  "version": "1.0.0",
+  "description": "Simple HTTP server for product data",
+  "main": "index.js"
+}
