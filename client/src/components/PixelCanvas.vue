@@ -24,14 +24,15 @@ function render() {
   if (!ctx || !imageData) return
   const data = imageData.data
   const pixels = store.pixels
+  const pixelBytes = new Uint8Array(pixels.buffer)
 
   for (let y = 0; y < BOARD_HEIGHT; y++) {
     for (let x = 0; x < BOARD_WIDTH; x++) {
-      const pixel = pixels[y * BOARD_WIDTH + x]
-      const r = (pixel >> 16) & 0xff
-      const g = (pixel >> 8) & 0xff
-      const b = pixel & 0xff
-      const a = (pixel >> 24) & 0xff
+      const byteIdx = (y * BOARD_WIDTH + x) * 4
+      const r = pixelBytes[byteIdx]
+      const g = pixelBytes[byteIdx + 1]
+      const b = pixelBytes[byteIdx + 2]
+      const a = pixelBytes[byteIdx + 3] || 255
 
       for (let py = 0; py < PIXEL_SIZE; py++) {
         for (let px = 0; px < PIXEL_SIZE; px++) {
@@ -39,7 +40,7 @@ function render() {
           data[idx] = r
           data[idx + 1] = g
           data[idx + 2] = b
-          data[idx + 3] = a || 255
+          data[idx + 3] = a
         }
       }
     }
@@ -85,11 +86,10 @@ onMounted(() => {
 })
 
 watch(
-  () => store.pixels,
+  () => store.version,
   () => {
     requestAnimationFrame(render)
-  },
-  { deep: true }
+  }
 )
 </script>
 
