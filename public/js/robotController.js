@@ -106,31 +106,50 @@ class RobotController {
     }
 
     const moveSpeed = this.speed * deltaTime;
-    const moveX = (dx / distance) * Math.min(moveSpeed, distance);
-    const moveZ = (dz / distance) * Math.min(moveSpeed, distance);
+    const actualMoveDistance = Math.min(moveSpeed, distance);
+    
+    const otherRobotsData = allRobots.filter(r => r.id !== this.id).map(r => ({
+      id: r.id,
+      x: r.controller.getPosition().x,
+      z: r.controller.getPosition().z
+    }));
 
-    const newX = currentPos.x + moveX;
-    const newZ = currentPos.z + moveZ;
+    const subSteps = Math.ceil(actualMoveDistance / 0.1);
+    const stepDistance = actualMoveDistance / subSteps;
+    const stepX = (dx / distance) * stepDistance;
+    const stepZ = (dz / distance) * stepDistance;
 
-    const collisionCheck = this.pathfinder.checkCollision(
-      this.id, newX, newZ,
-      allRobots.filter(r => r.id !== this.id).map(r => ({
-        id: r.id,
-        x: r.controller.getPosition().x,
-        z: r.controller.getPosition().z
-      }))
-    );
+    let tempX = currentPos.x;
+    let tempZ = currentPos.z;
+    let collided = false;
 
-    if (collisionCheck.collision) {
-      if (this.onCollision) {
-        this.onCollision(collisionCheck);
+    for (let i = 0; i < subSteps; i++) {
+      const nextX = tempX + stepX;
+      const nextZ = tempZ + stepZ;
+      
+      const collisionCheck = this.pathfinder.checkCollision(
+        this.id, nextX, nextZ, otherRobotsData
+      );
+
+      if (collisionCheck.collision) {
+        if (this.onCollision) {
+          this.onCollision(collisionCheck);
+        }
+        this.isMoving = false;
+        collided = true;
+        break;
       }
-      this.isMoving = false;
+      
+      tempX = nextX;
+      tempZ = nextZ;
+    }
+
+    if (collided) {
       return;
     }
 
-    this.mesh.position.x = newX;
-    this.mesh.position.z = newZ;
+    this.mesh.position.x = tempX;
+    this.mesh.position.z = tempZ;
     this.mesh.position.y = this.bobOffset;
 
     const targetRotation = Math.atan2(dx, dz);
@@ -143,7 +162,7 @@ class RobotController {
     this.mesh.rotation.y += rotationDiff * Math.min(deltaTime * 8, 1);
 
     if (this.mesh.userData.wheels) {
-      const wheelRotation = moveSpeed * 5;
+      const wheelRotation = actualMoveDistance * 5;
       this.mesh.userData.wheels.forEach(wheel => {
         wheel.rotation.x += wheelRotation;
       });

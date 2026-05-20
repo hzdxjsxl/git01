@@ -40,15 +40,34 @@ class Pathfinder {
   constructor(gridSize) {
     this.gridSize = gridSize;
     this.obstacles = new Set();
+    this.shelfData = [];
     this.robotPositions = new Map();
+    this.robotRadius = 0.5;
+    this.safetyMargin = 0.1;
   }
 
   setObstacles(shelves) {
     this.obstacles.clear();
+    this.shelfData = [];
+    
     shelves.forEach(shelf => {
-      const x = Math.round(shelf.x);
-      const z = Math.round(shelf.z);
-      this.obstacles.add(`${x},${z}`);
+      this.shelfData.push({
+        x: shelf.x,
+        z: shelf.z,
+        halfWidth: shelf.width / 2,
+        halfDepth: shelf.depth / 2
+      });
+      
+      const minX = Math.floor(shelf.x - shelf.width / 2 - this.safetyMargin);
+      const maxX = Math.ceil(shelf.x + shelf.width / 2 + this.safetyMargin);
+      const minZ = Math.floor(shelf.z - shelf.depth / 2 - this.safetyMargin);
+      const maxZ = Math.ceil(shelf.z + shelf.depth / 2 + this.safetyMargin);
+      
+      for (let x = minX; x <= maxX; x++) {
+        for (let z = minZ; z <= maxZ; z++) {
+          this.obstacles.add(`${x},${z}`);
+        }
+      }
     });
   }
 
@@ -61,7 +80,7 @@ class Pathfinder {
   }
 
   isWalkable(x, z, excludeRobotId = null) {
-    if (x < 0 || x >= this.gridSize || z < 0 || z >= this.gridSize) {
+    if (x < 1 || x >= this.gridSize - 1 || z < 1 || z >= this.gridSize - 1) {
       return false;
     }
     if (this.obstacles.has(`${x},${z}`)) {
@@ -247,19 +266,52 @@ class Pathfinder {
   }
 
   checkCollision(robotId, x, z, otherRobots = []) {
-    const gridX = Math.round(x);
-    const gridZ = Math.round(z);
-    
-    if (this.obstacles.has(`${gridX},${gridZ}`)) {
-      return { collision: true, type: 'shelf' };
+    for (const shelf of this.shelfData) {
+      const dx = Math.abs(x - shelf.x);
+      const dz = Math.abs(z - shelf.z);
+      const minDistX = shelf.halfWidth + this.robotRadius + this.safetyMargin;
+      const minDistZ = shelf.halfDepth + this.robotRadius + this.safetyMargin;
+      
+      if (dx < minDistX && dz < minDistZ) {
+        return { collision: true, type: 'shelf' };
+      }
     }
     
     for (const robot of otherRobots) {
       if (robot.id !== robotId) {
-        const otherX = Math.round(robot.x);
-        const otherZ = Math.round(robot.z);
-        if (otherX === gridX && otherZ === gridZ) {
+        const dx = x - robot.x;
+        const dz = z - robot.z;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+        if (distance < this.robotRadius * 2 + this.safetyMargin) {
           return { collision: true, type: 'robot', with: robot.id };
+        }
+      }
+    }
+    
+    if (x < this.robotRadius || x > this.gridSize - 1 - this.robotRadius ||
+        z < this.robotRadius || z > this.gridSize - 1 - this.robotRadius) {
+      return { collision: true, type: 'boundary' };
+    }
+    
+    return { collision: false };
+  }
+
+  checkPathCollision(path, robotId, otherRobots = []) {
+    if (!path || path.length < 2) return { collision: false };
+    
+    for (let i = 0; i < path.length - 1; i++) {
+      const start = path[i];
+      const end = path[i + 1];
+      
+      const steps = Math.max(Math.abs(end.x - start.x), Math.abs(end.z - start.z)) * 10;
+      for (let j = 0; j <= steps; j++) {
+        const t = j / steps;
+        const x = start.x + (end.x - start.x) * t;
+        const z = start.z + (end.z - start.z) * t;
+        
+        const collision = this.checkCollision(robotId, x, z, otherRobots);
+        if (collision.collision) {
+          return collision;
         }
       }
     }

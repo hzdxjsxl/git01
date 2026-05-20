@@ -25,6 +25,8 @@ class WarehouseApp {
       this.createShelves();
       this.createRobots();
       
+      this.sceneManager.createObstacleVisualization(this.pathfinder.obstacles);
+      
       this.setupUI();
       
       this.sceneManager.setAnimationCallback(() => this.update());
@@ -115,6 +117,28 @@ class WarehouseApp {
     const result = robot.controller.moveTo(targetX, targetZ);
     
     if (result.success) {
+      const otherRobots = this.robots.filter(r => r.id !== robot.id).map(r => ({
+        id: r.id,
+        x: r.controller.getPosition().x,
+        z: r.controller.getPosition().z
+      }));
+      
+      const pathCollision = this.pathfinder.checkPathCollision(
+        result.path, robot.id, otherRobots
+      );
+      
+      if (pathCollision.collision) {
+        robot.controller.stop();
+        const collisionType = pathCollision.type === 'shelf' ? '货架' : 
+                              pathCollision.type === 'robot' ? `机器人 ${pathCollision.with}` : '边界';
+        this.updatePathInfo(`
+          <div class="path-detail" style="color: #ff6b6b;"><strong>路径冲突!</strong></div>
+          <div class="path-detail">路径与 ${collisionType} 冲突</div>
+          <div class="path-detail">请选择其他目标位置</div>
+        `);
+        return;
+      }
+      
       const pathLine = ModelFactory.createPathLine(
         result.path,
         this.selectedRobotIndex === 0 ? 0xff4444 : 0x44ff44
@@ -131,7 +155,7 @@ class WarehouseApp {
         <div class="path-detail"><strong>机器人:</strong> ${this.selectedRobotIndex + 1}</div>
         <div class="path-detail"><strong>路径长度:</strong> ${result.pathLength} 步</div>
         <div class="path-detail"><strong>目标位置:</strong> (${targetX}, ${targetZ})</div>
-        <div class="path-detail"><strong>状态:</strong> 移动中...</div>
+        <div class="path-detail" style="color: #4ade80;"><strong>状态:</strong> 移动中...</div>
       `);
     } else {
       this.updatePathInfo(`

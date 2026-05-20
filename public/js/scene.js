@@ -9,7 +9,8 @@ class SceneManager {
       shelves: [],
       robots: [],
       pathLines: [],
-      markers: []
+      markers: [],
+      obstacles: []
     };
     this.gridSize = 20;
     this.animationId = null;
@@ -109,6 +110,26 @@ class SceneManager {
     );
     gridHelper.position.set(this.gridSize / 2 - 0.5, 0.01, this.gridSize / 2 - 0.5);
     this.scene.add(gridHelper);
+  }
+
+  createObstacleVisualization(obstacles) {
+    this.clearObjects('obstacles');
+    
+    const obstacleMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff0000,
+      transparent: true,
+      opacity: 0.15
+    });
+
+    obstacles.forEach(key => {
+      const [x, z] = key.split(',').map(Number);
+      const geometry = new THREE.PlaneGeometry(0.95, 0.95);
+      const plane = new THREE.Mesh(geometry, obstacleMaterial);
+      plane.rotation.x = -Math.PI / 2;
+      plane.position.set(x, 0.02, z);
+      this.objects.obstacles.push(plane);
+      this.scene.add(plane);
+    });
   }
 
   createWarehouseWalls() {
