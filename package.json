@@ -1,0 +1,16 @@
+{
+  "name": "prism-optics-simulation",
+  "version": "1.0.0",
+  "description": "物理光学实验模拟 - 三棱镜色散效果",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

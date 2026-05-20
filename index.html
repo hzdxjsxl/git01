@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物理光学实验模拟 - 三棱镜色散</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #canvas {
+            display: block;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px;
+            color: white;
+            min-width: 280px;
+        }
+        #controls h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 10px;
+        }
+        #controls p {
+            font-size: 14px;
+            margin-bottom: 10px;
+            line-height: 1.5;
+            opacity: 0.8;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-group label {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 5px;
+            opacity: 0.9;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            cursor: pointer;
+        }
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4facfe;
+            cursor: pointer;
+        }
+        #info-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 15px;
+            color: white;
+            font-size: 12px;
+        }
+        #info-panel div {
+            margin-bottom: 5px;
+        }
+        #info-panel div:last-child {
+            margin-bottom: 0;
+        }
+        #light-source {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, #fff 0%, #ffeb3b 50%, #ff9800 100%);
+            border-radius: 50%;
+            cursor: move;
+            box-shadow: 0 0 20px rgba(255, 235, 59, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+        }
+        #light-source::after {
+            content: '拖拽光源';
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            white-space: nowrap;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        <div id="controls">
+            <h2>🎯 物理光学实验</h2>
+            <p>拖拽左上角光源到三棱镜上观察彩虹色散效果</p>
+            <div class="control-group">
+                <label for="wavelength">波长: <span id="wavelength-value">550</span> nm</label>
+                <input type="range" id="wavelength" min="380" max="780" value="550" step="10">
+            </div>
+            <div class="control-group">
+                <label for="intensity">光强度: <span id="intensity-value">1.0</span></label>
+                <input type="range" id="intensity" min="0.1" max="2.0" value="1.0" step="0.1">
+            </div>
+        </div>
+        <div id="info-panel">
+            <div><strong>斯涅尔定律:</strong> n₁sinθ₁ = n₂sinθ₂</div>
+            <div><strong>材料:</strong> 冕牌玻璃 (BK7)</div>
+            <div><strong>顶角:</strong> 60°</div>
+        </div>
+        <div id="light-source" style="top: 100px; left: 100px;"></div>
+    </div>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
