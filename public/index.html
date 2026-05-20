@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>酒店客房预订排期系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🏨 酒店客房预订排期系统</h1>
+            <div class="controls">
+                <button id="prevWeek" class="btn">◀ 上周</button>
+                <span id="currentRange" class="date-range"></span>
+                <button id="nextWeek" class="btn">下周 ▶</button>
+                <button id="today" class="btn btn-primary">今天</button>
+                <button id="refresh" class="btn">🔄 刷新</button>
+            </div>
+        </header>
+
+        <div class="timeline-wrapper">
+            <div class="room-column">
+                <div class="timeline-header room-header">
+                    <span>房间号</span>
+                </div>
+                <div id="roomList" class="room-list"></div>
+            </div>
+            <div class="gantt-container" id="ganttContainer">
+                <div class="timeline-header" id="timelineHeader">
+                    <div class="timeline-dates" id="timelineDates"></div>
+                </div>
+                <div class="gantt-body" id="ganttBody">
+                    <div class="gantt-grid" id="ganttGrid"></div>
+                    <div class="gantt-bars" id="ganttBars"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <span class="legend-color" style="background: #4CAF50;"></span>
+                <span>已确认</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #2196F3;"></span>
+                <span>待确认</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #FF9800;"></span>
+                <span>今日入住</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #f44336;"></span>
+                <span>今日退房</span>
+            </div>
+        </div>
+
+        <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

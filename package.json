@@ -1,0 +1,14 @@
+{
+  "name": "hotel-booking-timeline",
+  "version": "1.0.0",
+  "description": "酒店客房预订时间轴排期面板",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}
