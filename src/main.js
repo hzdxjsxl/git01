@@ -1,16 +1,17 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 class PrismOpticsSimulation {
     constructor() {
         this.scene = null;
         this.camera = null;
         this.renderer = null;
+        this.controls = null;
         this.prism = null;
         this.lightRays = [];
         this.lightSourcePosition = { x: -4, y: 2, z: 5 };
-        this.wavelength = 550;
         this.intensity = 1.0;
-        this.mouseDown = false;
+        this.dragging = false;
         this.init();
     }
 
@@ -27,24 +28,42 @@ class PrismOpticsSimulation {
         const container = document.getElementById('container');
         
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x1a1a2e);
+        this.scene.background = new THREE.Color(0x0d1117);
 
         const width = container.clientWidth;
         const height = container.clientHeight;
         this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-        this.camera.position.set(0, 3, 8);
-        this.camera.lookAt(0, 0, 0);
+        this.camera.position.set(0, 2, 8);
+        this.camera.lookAt(0, 0.5, 0);
 
         this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
         this.renderer.setSize(width, height);
         this.renderer.setPixelRatio(window.devicePixelRatio);
 
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
         this.scene.add(ambientLight);
 
-        const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
-        gridHelper.position.y = -2;
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        directionalLight.position.set(3, 5, 5);
+        this.scene.add(directionalLight);
+
+        const pointLight1 = new THREE.PointLight(0x4facfe, 0.5);
+        pointLight1.position.set(-5, 3, 5);
+        this.scene.add(pointLight1);
+
+        const pointLight2 = new THREE.PointLight(0x00f2fe, 0.5);
+        pointLight2.position.set(5, 3, -5);
+        this.scene.add(pointLight2);
+
+        const gridHelper = new THREE.GridHelper(12, 12, 0x333333, 0x222222);
+        gridHelper.position.y = -1.5;
         this.scene.add(gridHelper);
+
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.minDistance = 4;
+        this.controls.maxDistance = 20;
 
         window.addEventListener('resize', () => {
             const w = container.clientWidth;
@@ -56,107 +75,105 @@ class PrismOpticsSimulation {
     }
 
     createPrism() {
-        const geometry = new THREE.CylinderGeometry(0, 0.8, 3, 3, 1, true);
+        const geometry = new THREE.CylinderGeometry(0, 1.5, 3, 3, 1, true);
         geometry.rotateZ(Math.PI / 2);
         geometry.rotateY(Math.PI / 6);
 
-        const material = new THREE.MeshPhongMaterial({
-            color: 0x88ccff,
+        const material = new THREE.MeshPhysicalMaterial({
+            color: 0x88bbff,
             transparent: true,
             opacity: 0.6,
-            shininess: 100,
+            roughness: 0.1,
+            metalness: 0.0,
+            transmission: 0.9,
+            thickness: 1.5,
             side: THREE.DoubleSide
         });
 
         this.prism = new THREE.Mesh(geometry, material);
         this.prism.position.y = 0.5;
         this.scene.add(this.prism);
+
+        const edges = new THREE.EdgesGeometry(geometry);
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.8 });
+        const wireframe = new THREE.LineSegments(edges, lineMaterial);
+        this.prism.add(wireframe);
     }
 
     getRefractiveIndex(wavelength) {
-        const B = 0.004607;
-        const C = 0.00001341;
-        const D = 0.0008696;
-        const E = 0.00008744;
-        const F = 0.001125;
-        const G = 0.00004441;
+        const B1 = 1.03961212;
+        const C1 = 0.00600069867;
+        const B2 = 0.231792344;
+        const C2 = 0.0200179144;
+        const B3 = 1.01046945;
+        const C3 = 103.560653;
         
-        const lambda = wavelength * 1e-9;
+        const lambda = wavelength * 0.001;
         const lambda2 = lambda * lambda;
-        const lambda4 = lambda2 * lambda2;
-        const lambda6 = lambda4 * lambda2;
         
-        const n2 = 1 + B / (1 - C / lambda2) + D / (1 - E / lambda2) + F / (1 - G / lambda2);
+        const n2 = 1 + B1 * lambda2 / (lambda2 - C1) + B2 * lambda2 / (lambda2 - C2) + B3 * lambda2 / (lambda2 - C3);
         return Math.sqrt(n2);
     }
 
     calculateRefraction(incidentDir, normal, n1, n2) {
-        const dotProduct = incidentDir.dot(normal);
-        const sinTheta1 = Math.sqrt(1 - dotProduct * dotProduct);
-        const sinTheta2 = (n1 / n2) * sinTheta1;
-
-        if (Math.abs(sinTheta2) > 1) {
+        const incident = incidentDir.clone().normalize();
+        const norm = normal.clone().normalize();
+        
+        const eta = n1 / n2;
+        const cosTheta1 = -incident.dot(norm);
+        const sinTheta1Sq = 1 - cosTheta1 * cosTheta1;
+        
+        if (sinTheta1Sq > 1 / (eta * eta)) {
             return null;
         }
-
-        const cosTheta2 = Math.sqrt(1 - sinTheta2 * sinTheta2);
-        const refractedDir = incidentDir.clone()
-            .multiplyScalar(n1 / n2)
-            .add(normal.clone().multiplyScalar((n1 / n2) * dotProduct - cosTheta2));
+        
+        const cosTheta2 = Math.sqrt(1 - sinTheta1Sq * eta * eta);
+        const refractedDir = incident.clone().multiplyScalar(eta)
+            .add(norm.clone().multiplyScalar(eta * cosTheta1 - cosTheta2));
         
         return refractedDir.normalize();
     }
 
     getColorFromWavelength(wavelength) {
-        let r, g, b;
+        let r = 0, g = 0, b = 0;
         
         if (wavelength >= 380 && wavelength < 440) {
             r = -(wavelength - 440) / (440 - 380);
-            g = 0;
             b = 1;
         } else if (wavelength >= 440 && wavelength < 490) {
-            r = 0;
             g = (wavelength - 440) / (490 - 440);
             b = 1;
         } else if (wavelength >= 490 && wavelength < 510) {
-            r = 0;
             g = 1;
             b = -(wavelength - 510) / (510 - 490);
         } else if (wavelength >= 510 && wavelength < 580) {
             r = (wavelength - 510) / (580 - 510);
             g = 1;
-            b = 0;
         } else if (wavelength >= 580 && wavelength < 645) {
             r = 1;
             g = -(wavelength - 645) / (645 - 580);
-            b = 0;
         } else if (wavelength >= 645 && wavelength <= 780) {
             r = 1;
-            g = 0;
-            b = 0;
-        } else {
-            r = 0;
-            g = 0;
-            b = 0;
         }
 
-        const gamma = 2.2;
-        return new THREE.Color(
-            Math.pow(r, gamma),
-            Math.pow(g, gamma),
-            Math.pow(b, gamma)
-        );
+        return new THREE.Color(r, g, b);
     }
 
     createLightRays() {
-        this.lightRays.forEach(ray => this.scene.remove(ray.mesh));
+        this.lightRays.forEach(ray => {
+            if (ray.mesh) {
+                this.scene.remove(ray.mesh);
+                ray.mesh.geometry.dispose();
+                ray.mesh.material.dispose();
+            }
+        });
         this.lightRays = [];
 
-        const wavelengths = [380, 420, 470, 520, 570, 620, 680, 750];
+        const wavelengths = [380, 410, 440, 470, 500, 530, 560, 590, 620, 650, 680, 720, 750];
         
         wavelengths.forEach(wavelength => {
             const ray = this.createRay(wavelength);
-            this.lightRays.push(ray);
+            if (ray) this.lightRays.push(ray);
         });
     }
 
@@ -170,114 +187,68 @@ class PrismOpticsSimulation {
             this.lightSourcePosition.z
         );
         
-        const direction = new THREE.Vector3(2, -1, -3).normalize();
+        const direction = new THREE.Vector3(4, -1, -4).normalize();
         
-        const intersection1 = this.rayIntersectsPrism(startPoint, direction);
-        if (!intersection1) return null;
-
-        const normal1 = this.getPrismNormal(intersection1.point);
-        const refractedDir1 = this.calculateRefraction(direction.clone().negate(), normal1, 1.0, n);
+        this.prism.updateMatrixWorld(true);
         
+        const raycaster = new THREE.Raycaster(startPoint, direction, 0, 100);
+        const intersects = raycaster.intersectObject(this.prism, false);
+        
+        if (intersects.length === 0) return null;
+        
+        const intersection1 = intersects[0];
+        const normal1 = intersection1.face.normal.clone();
+        normal1.transformDirection(this.prism.matrixWorld).normalize();
+        
+        const refractedDir1 = this.calculateRefraction(direction, normal1, 1.0, n);
         if (!refractedDir1) return null;
-
-        const intersection2 = this.rayIntersectsPrism(intersection1.point, refractedDir1);
-        if (!intersection2) return null;
-
-        const normal2 = this.getPrismNormal(intersection2.point);
-        const refractedDir2 = this.calculateRefraction(refractedDir1.clone().negate(), normal2, n, 1.0);
         
+        const pointAfterEntry = intersection1.point.clone().add(refractedDir1.clone().multiplyScalar(0.01));
+        
+        const raycaster2 = new THREE.Raycaster(pointAfterEntry, refractedDir1, 0, 100);
+        const intersects2 = raycaster2.intersectObject(this.prism, false);
+        
+        if (intersects2.length === 0) return null;
+        
+        const intersection2 = intersects2[0];
+        const normal2 = intersection2.face.normal.clone();
+        normal2.transformDirection(this.prism.matrixWorld).normalize();
+        
+        const refractedDir2 = this.calculateRefraction(refractedDir1, normal2, n, 1.0);
         if (!refractedDir2) return null;
-
-        const endPoint = intersection2.point.clone().add(refractedDir2.clone().multiplyScalar(10));
-
+        
+        const endPoint = intersection2.point.clone().add(refractedDir2.clone().multiplyScalar(20));
+        
         const points = [startPoint, intersection1.point, intersection2.point, endPoint];
         
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
         const material = new THREE.LineBasicMaterial({ 
             color: color, 
-            linewidth: 2,
+            linewidth: 3,
             transparent: true,
             opacity: this.intensity
         });
         
         const mesh = new THREE.Line(geometry, material);
-        
         this.scene.add(mesh);
         
         return { mesh, wavelength };
     }
 
-    rayIntersectsPrism(start, direction) {
-        const inverseDirection = new THREE.Vector3(
-            1 / direction.x,
-            1 / direction.y,
-            1 / direction.z
-        );
-
-        const min = new THREE.Vector3(-0.8, -0.5, -1.5);
-        const max = new THREE.Vector3(0.8, 1.5, 1.5);
-
-        const t1 = (min.x - start.x) * inverseDirection.x;
-        const t2 = (max.x - start.x) * inverseDirection.x;
-        const t3 = (min.y - start.y) * inverseDirection.y;
-        const t4 = (max.y - start.y) * inverseDirection.y;
-        const t5 = (min.z - start.z) * inverseDirection.z;
-        const t6 = (max.z - start.z) * inverseDirection.z;
-
-        const tMin = Math.max(Math.max(Math.min(t1, t2), Math.min(t3, t4)), Math.min(t5, t6));
-        const tMax = Math.min(Math.min(Math.max(t1, t2), Math.max(t3, t4)), Math.max(t5, t6));
-
-        if (tMax < 0 || tMin > tMax) return null;
-
-        const t = tMin >= 0 ? tMin : tMax;
-        const point = start.clone().add(direction.clone().multiplyScalar(t));
-
-        return { point, t };
-    }
-
-    getPrismNormal(point) {
-        const prismCenter = new THREE.Vector3(0, 0.5, 0);
-        
-        const inverseMatrix = new THREE.Matrix4().copy(this.prism.matrixWorld).invert();
-        const localPoint = point.clone().applyMatrix4(inverseMatrix);
-        
-        const localCenter = new THREE.Vector3(0, 0.5, 0);
-        const localToCenter = localPoint.clone().sub(localCenter);
-        
-        const angle = Math.atan2(localToCenter.z, localToCenter.x);
-        const faceAngle = (Math.PI / 3);
-        let faceIndex = Math.floor((angle + faceAngle / 2) / faceAngle);
-        
-        if (faceIndex < 0) faceIndex += 3;
-        if (faceIndex >= 3) faceIndex -= 3;
-        
-        const localNormals = [
-            new THREE.Vector3(Math.cos(0), 0, Math.sin(0)),
-            new THREE.Vector3(Math.cos(2 * Math.PI / 3), 0, Math.sin(2 * Math.PI / 3)),
-            new THREE.Vector3(Math.cos(4 * Math.PI / 3), 0, Math.sin(4 * Math.PI / 3))
-        ];
-        
-        const localNormal = localNormals[faceIndex].normalize();
-        
-        const worldNormal = localNormal.clone().applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(this.prism.matrixWorld));
-        
-        return worldNormal.normalize();
-    }
-
     setupEventListeners() {
         const lightSource = document.getElementById('light-source');
-        const container = document.getElementById('container');
         
         lightSource.addEventListener('mousedown', (e) => {
-            this.mouseDown = true;
+            e.stopPropagation();
             this.dragStartX = e.clientX;
             this.dragStartY = e.clientY;
             this.lightStartX = this.lightSourcePosition.x;
             this.lightStartY = this.lightSourcePosition.y;
+            this.dragging = true;
         });
 
         document.addEventListener('mousemove', (e) => {
-            if (!this.mouseDown) return;
+            if (!this.dragging) return;
 
             const deltaX = (e.clientX - this.dragStartX) * 0.02;
             const deltaY = (e.clientY - this.dragStartY) * -0.02;
@@ -287,20 +258,10 @@ class PrismOpticsSimulation {
 
             lightSource.style.left = e.clientX - 10 + 'px';
             lightSource.style.top = e.clientY - 10 + 'px';
-
-            this.updateLightRays();
         });
 
         document.addEventListener('mouseup', () => {
-            this.mouseDown = false;
-        });
-
-        const wavelengthSlider = document.getElementById('wavelength');
-        const wavelengthValue = document.getElementById('wavelength-value');
-        wavelengthSlider.addEventListener('input', (e) => {
-            this.wavelength = parseInt(e.target.value);
-            wavelengthValue.textContent = this.wavelength;
-            this.updateLightRays();
+            this.dragging = false;
         });
 
         const intensitySlider = document.getElementById('intensity');
@@ -308,22 +269,18 @@ class PrismOpticsSimulation {
         intensitySlider.addEventListener('input', (e) => {
             this.intensity = parseFloat(e.target.value);
             intensityValue.textContent = this.intensity;
-            this.updateLightRays();
         });
-    }
-
-    updateLightRays() {
-        this.lightRays.forEach(ray => this.scene.remove(ray.mesh));
-        this.lightRays = [];
-        this.createLightRays();
     }
 
     animate() {
         requestAnimationFrame(() => this.animate());
         
         if (this.prism) {
-            this.prism.rotation.y += 0.005;
+            this.prism.rotation.y += 0.003;
         }
+        
+        this.controls.update();
+        this.createLightRays();
         
         this.renderer.render(this.scene, this.camera);
     }
