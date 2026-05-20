@@ -116,14 +116,14 @@ class SceneManager {
     this.clearObjects('obstacles');
     
     const obstacleMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff0000,
+      color: 0xff6600,
       transparent: true,
-      opacity: 0.15
+      opacity: 0.25
     });
 
     obstacles.forEach(key => {
       const [x, z] = key.split(',').map(Number);
-      const geometry = new THREE.PlaneGeometry(0.95, 0.95);
+      const geometry = new THREE.PlaneGeometry(0.9, 0.9);
       const plane = new THREE.Mesh(geometry, obstacleMaterial);
       plane.rotation.x = -Math.PI / 2;
       plane.position.set(x, 0.02, z);

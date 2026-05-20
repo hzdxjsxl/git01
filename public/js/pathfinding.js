@@ -42,8 +42,8 @@ class Pathfinder {
     this.obstacles = new Set();
     this.shelfData = [];
     this.robotPositions = new Map();
-    this.robotRadius = 0.5;
-    this.safetyMargin = 0.1;
+    this.robotRadius = 0.35;
+    this.safetyMargin = 0.05;
   }
 
   setObstacles(shelves) {
@@ -58,16 +58,9 @@ class Pathfinder {
         halfDepth: shelf.depth / 2
       });
       
-      const minX = Math.floor(shelf.x - shelf.width / 2 - this.safetyMargin);
-      const maxX = Math.ceil(shelf.x + shelf.width / 2 + this.safetyMargin);
-      const minZ = Math.floor(shelf.z - shelf.depth / 2 - this.safetyMargin);
-      const maxZ = Math.ceil(shelf.z + shelf.depth / 2 + this.safetyMargin);
-      
-      for (let x = minX; x <= maxX; x++) {
-        for (let z = minZ; z <= maxZ; z++) {
-          this.obstacles.add(`${x},${z}`);
-        }
-      }
+      const centerX = Math.round(shelf.x);
+      const centerZ = Math.round(shelf.z);
+      this.obstacles.add(`${centerX},${centerZ}`);
     });
   }
 
@@ -80,7 +73,7 @@ class Pathfinder {
   }
 
   isWalkable(x, z, excludeRobotId = null) {
-    if (x < 1 || x >= this.gridSize - 1 || z < 1 || z >= this.gridSize - 1) {
+    if (x < 0 || x >= this.gridSize || z < 0 || z >= this.gridSize) {
       return false;
     }
     if (this.obstacles.has(`${x},${z}`)) {
@@ -132,11 +125,21 @@ class Pathfinder {
 
   findPath(startX, startZ, endX, endZ, robotId = null) {
     const start = new PathNode(Math.round(startX), Math.round(startZ));
-    const end = new PathNode(Math.round(endX), Math.round(endZ));
+    let end = new PathNode(Math.round(endX), Math.round(endZ));
+
+    if (!this.isWalkable(start.x, start.z, robotId)) {
+      console.warn(`起点位置 (${start.x}, ${start.z}) 不可达`);
+      return null;
+    }
 
     if (!this.isWalkable(end.x, end.z, robotId)) {
-      console.warn(`目标位置 (${end.x}, ${end.z}) 不可达`);
-      return null;
+      const nearest = this.findNearestWalkable(end.x, end.z, robotId);
+      if (!nearest) {
+        console.warn(`目标位置 (${end.x}, ${end.z}) 不可达，且附近没有可用位置`);
+        return null;
+      }
+      console.warn(`目标位置 (${end.x}, ${end.z}) 不可达，已调整到最近可达位置 (${nearest.x}, ${nearest.z})`);
+      end = nearest;
     }
 
     if (start.equals(end)) {
@@ -227,6 +230,28 @@ class Pathfinder {
     }
     
     return smoothed;
+  }
+
+  findNearestWalkable(targetX, targetZ, excludeRobotId) {
+    const maxRadius = 5;
+    
+    for (let radius = 1; radius <= maxRadius; radius++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+          const dist = Math.abs(dx) + Math.abs(dz);
+          if (dist !== radius) continue;
+          
+          const x = targetX + dx;
+          const z = targetZ + dz;
+          
+          if (this.isWalkable(x, z, excludeRobotId)) {
+            return new PathNode(x, z);
+          }
+        }
+      }
+    }
+    
+    return null;
   }
 
   hasLineOfSight(a, b) {
