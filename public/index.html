@@ -105,6 +105,7 @@
             <th>规格</th>
             <th>入库数量</th>
             <th>剩余数量</th>
+            <th>库存进度</th>
             <th>单位</th>
             <th>入库日期</th>
             <th>过期日期</th>
@@ -153,8 +154,12 @@
         const response = await fetch('/api/inventory');
         const result = await response.json();
         if (result.success) {
-          originalData = JSON.parse(JSON.stringify(result.data));
-          workingData = JSON.parse(JSON.stringify(result.data));
+          originalData = JSON.parse(JSON.stringify(result.data)).map(item => ({
+            ...item,
+            remaining: item.quantity,
+            used: 0
+          }));
+          workingData = JSON.parse(JSON.stringify(originalData));
           initMaterialSelect();
           renderTable();
           renderStats();
@@ -194,16 +199,26 @@
       const tbody = document.querySelector('#inventoryTable tbody');
       tbody.innerHTML = '';
       workingData.forEach(item => {
+        const remaining = item.remaining ?? item.quantity;
+        const used = item.used ?? 0;
+        const percent = ((remaining / item.quantity) * 100).toFixed(0);
         const expireInfo = getExpireStatus(item.expireDate);
-        const rowClass = item.remaining === 0 ? 'used' : (item.used > 0 ? 'partial' : '');
+        const rowClass = remaining === 0 ? 'used' : (used > 0 ? 'partial' : '');
         const qtyClass = expireInfo.status === 'expired' ? 'expired' : (expireInfo.status === 'soon' ? 'expiring-soon' : '');
+        const progressColor = percent > 50 ? '#52c41a' : (percent > 20 ? '#faad14' : '#ff4d4f');
         tbody.innerHTML += `
           <tr class="${rowClass}">
             <td>${item.batchNo}</td>
             <td>${item.name}</td>
             <td>${item.spec}</td>
             <td>${item.quantity}</td>
-            <td class="${qtyClass}">${item.remaining ?? item.quantity}</td>
+            <td class="${qtyClass}">${remaining}</td>
+            <td style="min-width: 120px;">
+              <div style="background: #f0f0f0; border-radius: 4px; height: 8px; overflow: hidden;">
+                <div style="width: ${percent}%; height: 100%; background: ${progressColor}; transition: width 0.3s ease;"></div>
+              </div>
+              <div style="font-size: 10px; color: #999; margin-top: 2px;">${percent}% (已用${used})</div>
+            </td>
             <td>${item.unit}</td>
             <td>${item.inDate}</td>
             <td class="${qtyClass}">${item.expireDate}</td>
@@ -243,12 +258,6 @@
     }
 
     function renderCharts() {
-      const ctx1 = document.getElementById('batchChart').getContext('2d');
-      const ctx2 = document.getElementById('expireChart').getContext('2d');
-
-      if (batchChart) batchChart.destroy();
-      if (expireChart) expireChart.destroy();
-
       const batchLabels = workingData.map(item => item.batchNo.slice(-6));
       const batchData = workingData.map(item => item.remaining ?? item.quantity);
       const batchColors = workingData.map(item => {
@@ -257,25 +266,6 @@
         if (status === 'soon') return '#faad14';
         if (status === 'warning') return '#ffc53d';
         return '#52c41a';
-      });
-
-      batchChart = new Chart(ctx1, {
-        type: 'pie',
-        data: {
-          labels: batchLabels,
-          datasets: [{
-            data: batchData,
-            backgroundColor: batchColors,
-            borderWidth: 2,
-            borderColor: '#fff'
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { position: 'right', labels: { font: { size: 11 } } }
-          }
-        }
       });
 
       let normalQty = 0, warningQty = 0, soonQty = 0, expiredQty = 0;
@@ -288,24 +278,58 @@
         else normalQty += qty;
       });
 
-      expireChart = new Chart(ctx2, {
-        type: 'doughnut',
-        data: {
-          labels: ['正常', '预警(90天内)', '临期(30天内)', '已过期'],
-          datasets: [{
-            data: [normalQty, warningQty, soonQty, expiredQty],
-            backgroundColor: ['#52c41a', '#ffc53d', '#faad14', '#ff4d4f'],
-            borderWidth: 2,
-            borderColor: '#fff'
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { position: 'right', labels: { font: { size: 11 } } }
+      const expireData = [normalQty, warningQty, soonQty, expiredQty];
+
+      if (batchChart && expireChart) {
+        batchChart.data.labels = batchLabels;
+        batchChart.data.datasets[0].data = [...batchData];
+        batchChart.data.datasets[0].backgroundColor = [...batchColors];
+        batchChart.update();
+
+        expireChart.data.datasets[0].data = [...expireData];
+        expireChart.update();
+      } else {
+        const ctx1 = document.getElementById('batchChart').getContext('2d');
+        const ctx2 = document.getElementById('expireChart').getContext('2d');
+
+        batchChart = new Chart(ctx1, {
+          type: 'pie',
+          data: {
+            labels: batchLabels,
+            datasets: [{
+              data: [...batchData],
+              backgroundColor: [...batchColors],
+              borderWidth: 2,
+              borderColor: '#fff'
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { position: 'right', labels: { font: { size: 11 } } }
+            }
           }
-        }
-      });
+        });
+
+        expireChart = new Chart(ctx2, {
+          type: 'doughnut',
+          data: {
+            labels: ['正常', '预警(90天内)', '临期(30天内)', '已过期'],
+            datasets: [{
+              data: [...expireData],
+              backgroundColor: ['#52c41a', '#ffc53d', '#faad14', '#ff4d4f'],
+              borderWidth: 2,
+              borderColor: '#fff'
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { position: 'right', labels: { font: { size: 11 } } }
+            }
+          }
+        });
+      }
     }
 
     function runFIFO() {
@@ -321,11 +345,11 @@
         return;
       }
 
-      workingData = JSON.parse(JSON.stringify(originalData));
-      workingData.forEach(item => {
-        item.remaining = item.quantity;
-        item.used = 0;
-      });
+      workingData = workingData.map(item => ({
+        ...item,
+        remaining: item.remaining ?? item.quantity,
+        used: item.used ?? 0
+      }));
 
       const filtered = workingData
         .filter(item => item.name === materialName)
@@ -345,23 +369,34 @@
         if (remainingConsume <= 0) break;
         
         if (item.remaining <= remainingConsume) {
-          item.used = item.remaining;
+          item.used += item.remaining;
+          const usedAmount = item.remaining;
           item.remaining = 0;
-          remainingConsume -= item.used;
+          remainingConsume -= usedAmount;
           usedBatches.push({ ...item });
         } else {
-          item.used = remainingConsume;
-          item.remaining = item.quantity - item.used;
-          remainingConsume = 0;
+          item.used += remainingConsume;
+          item.remaining = item.remaining - remainingConsume;
           partialBatches.push({ ...item });
+          remainingConsume = 0;
         }
       }
+
+      workingData = [...workingData];
+
+      console.log('=== FIFO计算结果 ===');
+      console.log('消耗数量:', consumeQty);
+      console.log('完全消耗批次:', usedBatches);
+      console.log('部分消耗批次:', partialBatches);
+      console.log('更新后workingData:', workingData);
 
       renderResult(consumeQty, materialName, usedBatches, partialBatches, totalAvailable);
       renderTable();
       renderStats();
       renderCharts();
       renderRemainingTable(materialName);
+
+      console.log('=== 渲染完成 ===');
     }
 
     function renderResult(consumeQty, materialName, usedBatches, partialBatches, totalAvailable) {
@@ -441,10 +476,6 @@
 
     function resetData() {
       workingData = JSON.parse(JSON.stringify(originalData));
-      workingData.forEach(item => {
-        delete item.remaining;
-        delete item.used;
-      });
       renderTable();
       renderStats();
       renderCharts();
