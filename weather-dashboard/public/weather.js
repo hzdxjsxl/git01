@@ -9,9 +9,11 @@ class WeatherDashboard {
         this.maxLng = 135;
         this.minLat = 18;
         this.maxLat = 53;
-        this.gridWidth = 150;
-        this.gridHeight = 120;
+        this.gridWidth = 50;
+        this.gridHeight = 40;
         this.contourLevels = [10, 25, 50, 100, 150];
+        this.stationSpatial = new Map();
+        this.spatialCellSize = 5;
         this.init();
     }
 
@@ -23,8 +25,9 @@ class WeatherDashboard {
 
     resizeCanvas() {
         const container = this.canvas.parentElement;
-        this.canvas.width = container.clientWidth;
-        this.canvas.height = container.clientHeight;
+        const rect = container.getBoundingClientRect();
+        this.canvas.width = rect.width;
+        this.canvas.height = rect.height;
         if (this.grid.length > 0) {
             this.draw();
         }
@@ -35,9 +38,10 @@ class WeatherDashboard {
         try {
             const response = await fetch('http://localhost:3001/api/rainfall');
             this.stations = await response.json();
-            this.interpolateGrid();
+            this.buildSpatialIndex();
+            await this.interpolateGridAsync();
             this.updateStats();
-            this.draw();
+            await this.drawAsync();
         } catch (error) {
             console.error('Failed to load data:', error);
         } finally {
@@ -45,7 +49,40 @@ class WeatherDashboard {
         }
     }
 
-    interpolateGrid() {
+    buildSpatialIndex() {
+        this.stationSpatial = new Map();
+        
+        for (const station of this.stations) {
+            const gx = Math.floor((station.lng - this.minLng) / this.spatialCellSize);
+            const gy = Math.floor((station.lat - this.minLat) / this.spatialCellSize);
+            const key = `${gx},${gy}`;
+            
+            if (!this.stationSpatial.has(key)) {
+                this.stationSpatial.set(key, []);
+            }
+            this.stationSpatial.get(key).push(station);
+        }
+    }
+
+    getNearbyStations(lng, lat) {
+        const gx = Math.floor((lng - this.minLng) / this.spatialCellSize);
+        const gy = Math.floor((lat - this.minLat) / this.spatialCellSize);
+        const stations = [];
+        
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const key = `${gx + dx},${gy + dy}`;
+                const cellStations = this.stationSpatial.get(key);
+                if (cellStations) {
+                    stations.push(...cellStations);
+                }
+            }
+        }
+        
+        return stations;
+    }
+
+    async interpolateGridAsync() {
         this.grid = [];
         
         for (let y = 0; y < this.gridHeight; y++) {
@@ -53,191 +90,108 @@ class WeatherDashboard {
             for (let x = 0; x < this.gridWidth; x++) {
                 const lng = this.minLng + (x / (this.gridWidth - 1)) * (this.maxLng - this.minLng);
                 const lat = this.maxLat - (y / (this.gridHeight - 1)) * (this.maxLat - this.minLat);
-                const value = this.bilinearInterpolation(lng, lat);
-                row.push(value);
+                row.push(this.interpolateValue(lng, lat));
             }
             this.grid.push(row);
         }
     }
 
-    bilinearInterpolation(lng, lat) {
-        const neighbors = this.findNearestNeighbors(lng, lat, 4);
+    interpolateValue(lng, lat) {
+        const nearby = this.getNearbyStations(lng, lat);
         
-        if (neighbors.length < 2) {
+        if (nearby.length === 0) {
             return 0;
         }
         
         let value = 0;
         let totalWeight = 0;
         
-        for (const station of neighbors) {
+        for (const station of nearby) {
             const dx = station.lng - lng;
             const dy = station.lat - lat;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+            const dist = dx * dx + dy * dy;
             
-            if (dist < 0.001) {
+            if (dist < 0.0001) {
                 return station.rainfall;
             }
             
-            const weight = 1 / (dist * dist + 0.01);
-            value += station.rainfall * weight;
-            totalWeight += weight;
+            if (dist < 36) {
+                const weight = 1 / (dist + 0.1);
+                value += station.rainfall * weight;
+                totalWeight += weight;
+            }
         }
         
         return totalWeight > 0 ? value / totalWeight : 0;
     }
 
-    findNearestNeighbors(lng, lat, count) {
-        const distances = this.stations.map(station => {
-            const dx = station.lng - lng;
-            const dy = station.lat - lat;
-            return {
-                station,
-                distance: Math.sqrt(dx * dx + dy * dy)
-            };
-        });
-        
-        return distances
-            .sort((a, b) => a.distance - b.distance)
-            .slice(0, count)
-            .map(d => d.station);
+    yieldToBrowser() {
+        return new Promise(resolve => setTimeout(resolve, 0));
     }
 
     marchingSquares(level) {
-        const contours = [];
-        const visited = new Set();
+        const lines = [];
 
         for (let y = 0; y < this.gridHeight - 1; y++) {
             for (let x = 0; x < this.gridWidth - 1; x++) {
-                const cell = this.getCell(x, y);
-                const squareType = this.getSquareType(cell, level);
+                const v0 = this.grid[y][x];
+                const v1 = this.grid[y][x + 1];
+                const v2 = this.grid[y + 1][x + 1];
+                const v3 = this.grid[y + 1][x];
                 
-                if (squareType === 0 || squareType === 15) {
-                    continue;
-                }
+                let type = 0;
+                if (v0 >= level) type |= 1;
+                if (v1 >= level) type |= 2;
+                if (v2 >= level) type |= 4;
+                if (v3 >= level) type |= 8;
+                
+                if (type === 0 || type === 15) continue;
 
-                const edges = this.getEdges(squareType);
-                for (const edge of edges) {
-                    const key = `${x},${y},${edge}`;
-                    if (visited.has(key)) continue;
-
-                    const contour = this.traceContour(x, y, edge, level);
-                    if (contour.length > 1) {
-                        contours.push(contour);
-                    }
-                    
-                    for (const point of contour) {
-                        visited.add(`${point.x},${point.y},${point.edge}`);
-                    }
+                const interpPoints = this.getInterpPoints(x, y, v0, v1, v2, v3, level);
+                
+                switch (type) {
+                    case 1: case 14:
+                        lines.push([interpPoints.a, interpPoints.d]);
+                        break;
+                    case 2: case 13:
+                        lines.push([interpPoints.a, interpPoints.b]);
+                        break;
+                    case 3: case 12:
+                        lines.push([interpPoints.b, interpPoints.d]);
+                        break;
+                    case 4: case 11:
+                        lines.push([interpPoints.c, interpPoints.d]);
+                        break;
+                    case 5: case 10:
+                        lines.push([interpPoints.a, interpPoints.c]);
+                        break;
+                    case 6: case 9:
+                        lines.push([interpPoints.a, interpPoints.b]);
+                        lines.push([interpPoints.c, interpPoints.d]);
+                        break;
+                    case 7: case 8:
+                        lines.push([interpPoints.b, interpPoints.c]);
+                        break;
                 }
             }
         }
 
-        return contours;
+        return lines;
     }
 
-    getCell(x, y) {
-        return [
-            this.grid[y][x],
-            this.grid[y][x + 1],
-            this.grid[y + 1][x + 1],
-            this.grid[y + 1][x]
-        ];
-    }
-
-    getSquareType(cell, level) {
-        let type = 0;
-        if (cell[0] >= level) type |= 1;
-        if (cell[1] >= level) type |= 2;
-        if (cell[2] >= level) type |= 4;
-        if (cell[3] >= level) type |= 8;
-        return type;
-    }
-
-    getEdges(squareType) {
-        const edgeMap = {
-            1: [0, 3], 2: [0, 1], 3: [1, 3],
-            4: [2, 3], 5: [0, 2], 6: [0, 1, 2, 3],
-            7: [1, 2], 8: [1, 2], 9: [0, 1, 2, 3],
-            10: [0, 2], 11: [2, 3], 12: [0, 3],
-            13: [0, 1], 14: [1, 3], 15: []
+    getInterpPoints(x, y, v0, v1, v2, v3, level) {
+        const interp = (vLow, vHigh) => {
+            const diff = vHigh - vLow;
+            if (diff === 0) return 0.5;
+            return (level - vLow) / diff;
         };
-        return edgeMap[squareType] || [];
-    }
 
-    traceContour(startX, startY, startEdge, level) {
-        const contour = [];
-        let x = startX;
-        let y = startY;
-        let edge = startEdge;
-
-        while (true) {
-            const point = this.getEdgePoint(x, y, edge, level);
-            contour.push({ x: point.x, y: point.y, edge });
-
-            const cell = this.getCell(x, y);
-            const squareType = this.getSquareType(cell, level);
-            const edges = this.getEdges(squareType);
-            
-            const nextEdge = edges.find(e => e !== edge);
-            if (nextEdge === undefined) break;
-
-            switch (nextEdge) {
-                case 0:
-                    y--;
-                    edge = 2;
-                    break;
-                case 1:
-                    x++;
-                    edge = 3;
-                    break;
-                case 2:
-                    y++;
-                    edge = 0;
-                    break;
-                case 3:
-                    x--;
-                    edge = 1;
-                    break;
-            }
-
-            if (x < 0 || x >= this.gridWidth - 1 || y < 0 || y >= this.gridHeight - 1) {
-                break;
-            }
-
-            if (x === startX && y === startY && nextEdge === startEdge) {
-                break;
-            }
-
-            edge = nextEdge;
-        }
-
-        return contour;
-    }
-
-    getEdgePoint(x, y, edge, level) {
-        const cell = this.getCell(x, y);
-        
-        switch (edge) {
-            case 0: {
-                const t = (level - cell[3]) / (cell[0] - cell[3] || 0.0001);
-                return { x: x + (1 - t) * 0, y: y + (1 - t) * 0 };
-            }
-            case 1: {
-                const t = (level - cell[0]) / (cell[1] - cell[0] || 0.0001);
-                return { x: x + t, y: y };
-            }
-            case 2: {
-                const t = (level - cell[2]) / (cell[3] - cell[2] || 0.0001);
-                return { x: x + t, y: y + 1 };
-            }
-            case 3: {
-                const t = (level - cell[3]) / (cell[2] - cell[3] || 0.0001);
-                return { x: x, y: y + t };
-            }
-            default:
-                return { x, y };
-        }
+        return {
+            a: { x: x + interp(v0, v1), y: y },
+            b: { x: x + 1, y: y + interp(v1, v2) },
+            c: { x: x + interp(v3, v2), y: y + 1 },
+            d: { x: x, y: y + interp(v0, v3) }
+        };
     }
 
     getColor(value) {
@@ -250,18 +204,22 @@ class WeatherDashboard {
     }
 
     drawColorGradient() {
-        const imageData = this.ctx.createImageData(this.canvas.width, this.canvas.height);
+        if (this.grid.length === 0) return;
+        
+        const offscreen = document.createElement('canvas');
+        offscreen.width = this.gridWidth;
+        offscreen.height = this.gridHeight;
+        const offCtx = offscreen.getContext('2d');
+        
+        const imageData = offCtx.createImageData(this.gridWidth, this.gridHeight);
         const data = imageData.data;
 
-        for (let py = 0; py < this.canvas.height; py++) {
-            for (let px = 0; px < this.canvas.width; px++) {
-                const gx = Math.floor((px / this.canvas.width) * (this.gridWidth - 1));
-                const gy = Math.floor((py / this.canvas.height) * (this.gridHeight - 1));
-                
-                const value = this.grid[gy]?.[gx] || 0;
+        for (let y = 0; y < this.gridHeight; y++) {
+            for (let x = 0; x < this.gridWidth; x++) {
+                const value = this.grid[y][x] || 0;
                 const color = this.hexToRgb(this.getColor(value));
                 
-                const idx = (py * this.canvas.width + px) * 4;
+                const idx = (y * this.gridWidth + x) * 4;
                 data[idx] = color.r;
                 data[idx + 1] = color.g;
                 data[idx + 2] = color.b;
@@ -269,7 +227,10 @@ class WeatherDashboard {
             }
         }
 
-        this.ctx.putImageData(imageData, 0, 0);
+        offCtx.putImageData(imageData, 0, 0);
+        
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.drawImage(offscreen, 0, 0, this.canvas.width, this.canvas.height);
     }
 
     hexToRgb(hex) {
@@ -281,43 +242,31 @@ class WeatherDashboard {
         } : { r: 255, g: 255, b: 255 };
     }
 
-    drawContours() {
+    async drawContoursAsync() {
         this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
         this.ctx.lineWidth = 1.5;
 
         for (const level of this.contourLevels) {
-            const contours = this.marchingSquares(level);
+            const lines = this.marchingSquares(level);
             
-            for (const contour of contours) {
-                if (contour.length < 2) continue;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
                 
                 this.ctx.beginPath();
-                
-                for (let i = 0; i < contour.length; i++) {
-                    const point = contour[i];
-                    const px = (point.x / (this.gridWidth - 1)) * this.canvas.width;
-                    const py = (point.y / (this.gridHeight - 1)) * this.canvas.height;
-                    
-                    if (i === 0) {
-                        this.ctx.moveTo(px, py);
-                    } else {
-                        this.ctx.lineTo(px, py);
-                    }
-                }
-                
+                const p0 = this.gridToPixel(line[0]);
+                const p1 = this.gridToPixel(line[1]);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
                 this.ctx.stroke();
-                
-                if (contour.length > 3) {
-                    const first = contour[0];
-                    const last = contour[contour.length - 1];
-                    const dist = Math.sqrt(Math.pow(first.x - last.x, 2) + Math.pow(first.y - last.y, 2));
-                    if (dist < 1) {
-                        this.ctx.closePath();
-                        this.ctx.stroke();
-                    }
-                }
             }
         }
+    }
+
+    gridToPixel(point) {
+        return {
+            x: (point.x / (this.gridWidth - 1)) * this.canvas.width,
+            y: (point.y / (this.gridHeight - 1)) * this.canvas.height
+        };
     }
 
     drawStationMarkers() {
@@ -330,11 +279,6 @@ class WeatherDashboard {
             this.ctx.beginPath();
             this.ctx.arc(px, py, 4, 0, Math.PI * 2);
             this.ctx.fill();
-            
-            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-            this.ctx.font = '10px Microsoft YaHei';
-            this.ctx.fillText(station.rainfall.toFixed(1), px + 6, py + 3);
-            this.ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
         }
     }
 
@@ -361,7 +305,40 @@ class WeatherDashboard {
         this.ctx.stroke();
     }
 
+    async drawAsync() {
+        if (this.grid.length === 0) return;
+        
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        this.drawColorGradient();
+        this.drawContours();
+        this.drawChinaOutline();
+        this.drawStationMarkers();
+    }
+
+    drawContours() {
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        this.ctx.lineWidth = 1.5;
+
+        for (const level of this.contourLevels) {
+            const lines = this.marchingSquares(level);
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                this.ctx.beginPath();
+                const p0 = this.gridToPixel(line[0]);
+                const p1 = this.gridToPixel(line[1]);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
+                this.ctx.stroke();
+            }
+        }
+    }
+
     draw() {
+        if (this.grid.length === 0) return;
+        
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
         this.drawColorGradient();
