@@ -237,22 +237,31 @@ class PrismOpticsSimulation {
 
     getPrismNormal(point) {
         const prismCenter = new THREE.Vector3(0, 0.5, 0);
-        const localPoint = point.clone().sub(prismCenter);
         
-        const angle = Math.atan2(localPoint.z, localPoint.x);
+        const inverseMatrix = new THREE.Matrix4().copy(this.prism.matrixWorld).invert();
+        const localPoint = point.clone().applyMatrix4(inverseMatrix);
+        
+        const localCenter = new THREE.Vector3(0, 0.5, 0);
+        const localToCenter = localPoint.clone().sub(localCenter);
+        
+        const angle = Math.atan2(localToCenter.z, localToCenter.x);
         const faceAngle = (Math.PI / 3);
         let faceIndex = Math.floor((angle + faceAngle / 2) / faceAngle);
         
         if (faceIndex < 0) faceIndex += 3;
         if (faceIndex >= 3) faceIndex -= 3;
         
-        const normals = [
+        const localNormals = [
             new THREE.Vector3(Math.cos(0), 0, Math.sin(0)),
             new THREE.Vector3(Math.cos(2 * Math.PI / 3), 0, Math.sin(2 * Math.PI / 3)),
             new THREE.Vector3(Math.cos(4 * Math.PI / 3), 0, Math.sin(4 * Math.PI / 3))
         ];
         
-        return normals[faceIndex].normalize();
+        const localNormal = localNormals[faceIndex].normalize();
+        
+        const worldNormal = localNormal.clone().applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(this.prism.matrixWorld));
+        
+        return worldNormal.normalize();
     }
 
     setupEventListeners() {
