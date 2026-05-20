@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>三维仓库可视化大盘</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <div class="header">
+      <h1>🏭 三维仓库可视化大盘</h1>
+      <div class="status-panel">
+        <div class="status-item">
+          <span class="label">货架数量:</span>
+          <span id="shelfCount" class="value">0</span>
+        </div>
+        <div class="status-item">
+          <span class="label">机器人数量:</span>
+          <span id="robotCount" class="value">0</span>
+        </div>
+        <div class="status-item">
+          <span class="label">运行状态:</span>
+          <span id="status" class="value status-running">运行中</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="main-content">
+      <div id="canvas-container"></div>
+      
+      <div class="control-panel">
+        <h3>🎮 控制面板</h3>
+        
+        <div class="control-group">
+          <label>选择机器人:</label>
+          <select id="robotSelect">
+            <option value="0">机器人 1 (红色)</option>
+            <option value="1">机器人 2 (绿色)</option>
+          </select>
+        </div>
+        
+        <div class="control-group">
+          <label>目标位置 (X, Z):</label>
+          <div class="input-row">
+            <input type="number" id="targetX" value="10" min="0" max="20">
+            <input type="number" id="targetZ" value="10" min="0" max="20">
+          </div>
+        </div>
+        
+        <div class="control-group">
+          <label>移动速度:</label>
+          <input type="range" id="speedSlider" min="1" max="10" value="5">
+          <span id="speedValue">5</span>
+        </div>
+        
+        <button id="moveBtn" class="btn btn-primary">🚀 开始移动</button>
+        <button id="resetBtn" class="btn btn-secondary">🔄 重置位置</button>
+        <button id="randomBtn" class="btn btn-accent">🎲 随机目标</button>
+        
+        <div class="info-section">
+          <h4>📊 寻路信息</h4>
+          <div id="pathInfo" class="info-box">
+            <p>点击"开始移动"查看寻路结果</p>
+          </div>
+        </div>
+        
+        <div class="info-section">
+          <h4>⌨️ 操作说明</h4>
+          <ul class="tips">
+            <li>鼠标左键拖拽: 旋转视角</li>
+            <li>鼠标滚轮: 缩放</li>
+            <li>鼠标右键拖拽: 平移</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div id="loading" class="loading-overlay">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <p>正在加载三维仓库...</p>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="js/pathfinding.js"></script>
+  <script src="js/models.js"></script>
+  <script src="js/scene.js"></script>
+  <script src="js/robotController.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
