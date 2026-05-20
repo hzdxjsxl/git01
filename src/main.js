@@ -12,13 +12,13 @@ class PrismOpticsSimulation {
         this.lightSourcePosition = { x: -4, y: 2, z: 5 };
         this.intensity = 1.0;
         this.dragging = false;
+        this.debugHelpers = [];
         this.init();
     }
 
     init() {
         this.setupScene();
         this.createPrism();
-        this.createLightRays();
         this.setupEventListeners();
         this.animate();
     }
@@ -59,6 +59,9 @@ class PrismOpticsSimulation {
         gridHelper.position.y = -1.5;
         this.scene.add(gridHelper);
 
+        const axesHelper = new THREE.AxesHelper(3);
+        this.scene.add(axesHelper);
+
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.05;
@@ -82,7 +85,7 @@ class PrismOpticsSimulation {
         const material = new THREE.MeshPhysicalMaterial({
             color: 0x88bbff,
             transparent: true,
-            opacity: 0.6,
+            opacity: 0.5,
             roughness: 0.1,
             metalness: 0.0,
             transmission: 0.9,
@@ -98,6 +101,8 @@ class PrismOpticsSimulation {
         const lineMaterial = new THREE.LineBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.8 });
         const wireframe = new THREE.LineSegments(edges, lineMaterial);
         this.prism.add(wireframe);
+
+        this.prismBoundingBox = new THREE.Box3().setFromObject(this.prism);
     }
 
     getRefractiveIndex(wavelength) {
@@ -159,7 +164,7 @@ class PrismOpticsSimulation {
         return new THREE.Color(r, g, b);
     }
 
-    createLightRays() {
+    clearLightRays() {
         this.lightRays.forEach(ray => {
             if (ray.mesh) {
                 this.scene.remove(ray.mesh);
@@ -169,25 +174,45 @@ class PrismOpticsSimulation {
         });
         this.lightRays = [];
 
-        const wavelengths = [380, 410, 440, 470, 500, 530, 560, 590, 620, 650, 680, 720, 750];
-        
-        wavelengths.forEach(wavelength => {
-            const ray = this.createRay(wavelength);
-            if (ray) this.lightRays.push(ray);
+        this.debugHelpers.forEach(helper => {
+            this.scene.remove(helper);
         });
+        this.debugHelpers = [];
     }
 
-    createRay(wavelength) {
-        const n = this.getRefractiveIndex(wavelength);
-        const color = this.getColorFromWavelength(wavelength);
-        
+    createLightRays() {
+        this.clearLightRays();
+
+        const prismCenter = new THREE.Vector3(0, 0.5, 0);
+        this.prism.localToWorld(prismCenter);
+
         const startPoint = new THREE.Vector3(
             this.lightSourcePosition.x,
             this.lightSourcePosition.y,
             this.lightSourcePosition.z
         );
+
+        const direction = prismCenter.clone().sub(startPoint).normalize();
+
+        const sourceSphere = new THREE.Mesh(
+            new THREE.SphereGeometry(0.15, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        sourceSphere.position.copy(startPoint);
+        this.scene.add(sourceSphere);
+        this.debugHelpers.push(sourceSphere);
+
+        const wavelengths = [380, 410, 440, 470, 500, 530, 560, 590, 620, 650, 680, 720, 750];
         
-        const direction = new THREE.Vector3(4, -1, -4).normalize();
+        wavelengths.forEach(wavelength => {
+            const ray = this.createRay(wavelength, startPoint, direction);
+            if (ray) this.lightRays.push(ray);
+        });
+    }
+
+    createRay(wavelength, startPoint, direction) {
+        const n = this.getRefractiveIndex(wavelength);
+        const color = this.getColorFromWavelength(wavelength);
         
         this.prism.updateMatrixWorld(true);
         
@@ -224,7 +249,7 @@ class PrismOpticsSimulation {
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
         const material = new THREE.LineBasicMaterial({ 
             color: color, 
-            linewidth: 3,
+            linewidth: 2,
             transparent: true,
             opacity: this.intensity
         });
