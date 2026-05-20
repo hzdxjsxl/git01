@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>城市房产均价热力图 · 泰森多边形</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0f1220; color: #e8ecf7;
+               font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .app { display: flex; flex-direction: column; height: 100vh; }
+  header { padding: 14px 22px; background: #171a2b; border-bottom: 1px solid #252a42;
+           display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: 1px; }
+  .stats { font-size: 12px; color: #9aa4c0; display: flex; gap: 16px; }
+  .stats b { color: #ffd36e; font-weight: 600; }
+  .controls { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .controls button { background: #2a2f4d; color: #e8ecf7; border: 1px solid #3a4168;
+                     padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .controls button:hover { background: #363c63; }
+  .controls label { font-size: 12px; color: #9aa4c0; display: flex; align-items: center; gap: 4px; }
+  main { flex: 1; display: flex; overflow: hidden; }
+  .canvas-wrap { flex: 1; position: relative; background: #0b0e1a; }
+  canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+  .legend { width: 240px; padding: 18px 16px; background: #171a2b; border-left: 1px solid #252a42;
+            overflow-y: auto; }
+  .legend h2 { font-size: 13px; margin: 0 0 10px 0; color: #cfd6ee; }
+  .scale { height: 18px; width: 100%; border-radius: 3px; margin-bottom: 6px; }
+  .scale-labels { display: flex; justify-content: space-between; font-size: 11px; color: #9aa4c0; }
+  .legend-list { margin-top: 18px; }
+  .legend-list .row { display: flex; align-items: center; gap: 8px; font-size: 11px;
+                      padding: 4px 0; color: #cfd6ee; }
+  .swatch { width: 14px; height: 14px; border-radius: 2px; border: 1px solid #2c3149; flex-shrink: 0; }
+  .hint { margin-top: 14px; font-size: 11px; color: #7c86a6; line-height: 1.6; }
+  .hover-info { position: absolute; left: 16px; bottom: 16px; background: rgba(20,24,42,0.92);
+                border: 1px solid #2c3149; border-radius: 4px; padding: 8px 12px;
+                font-size: 12px; color: #e8ecf7; pointer-events: none; display: none; }
+  .hover-info b { color: #ffd36e; }
+  .loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+             color: #9aa4c0; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🏙 城市房产均价热力分析面板</h1>
+    <div class="stats">
+      小区数：<b id="stat-count">—</b> ·
+      均价：<b id="stat-avg">—</b> ·
+      最高价：<b id="stat-max">—</b> ·
+      最低价：<b id="stat-min">—</b>
+    </div>
+    <div class="controls">
+      <label><input type="checkbox" id="toggle-borders" checked /> 显示边界</label>
+      <label><input type="checkbox" id="toggle-points" /> 显示小区点</label>
+      <button id="btn-recompute">重新计算</button>
+    </div>
+  </header>
+  <main>
+    <div class="canvas-wrap" id="canvas-wrap">
+      <div class="loading" id="loading">正在加载小区数据...</div>
+      <canvas id="canvas"></canvas>
+      <div class="hover-info" id="hover"></div>
+    </div>
+    <aside class="legend">
+      <h2>均价热力色阶 (元/㎡)</h2>
+      <canvas id="scale-canvas" class="scale"></canvas>
+      <div class="scale-labels">
+        <span id="scale-min">—</span>
+        <span id="scale-mid">—</span>
+        <span id="scale-max">—</span>
+      </div>
+      <div class="legend-list">
+        <div class="row"><span class="swatch" style="background:#1e3a8a"></span>低价位区</div>
+        <div class="row"><span class="swatch" style="background:#0ea5e9"></span>偏低价位</div>
+        <div class="row"><span class="swatch" style="background:#22c55e"></span>中等价位</div>
+        <div class="row"><span class="swatch" style="background:#facc15"></span>偏高价位</div>
+        <div class="row"><span class="swatch" style="background:#f97316"></span>高价位区</div>
+        <div class="row"><span class="swatch" style="background:#dc2626"></span>天价核心区</div>
+      </div>
+      <div class="hint">
+        算法：基于每个小区点的经纬度，使用增量式半平面相交法
+        手工计算泰森多边形（Voronoi Diagram），每个小区独立
+        构造自身泰森单元，随后按均价映射热力色阶填充。
+        全程零第三方算法库。
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script src="/voronoi.js"></script>
+<script>
+(function () {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const hover = document.getElementById('hover');
+  const loading = document.getElementById('loading');
+  const wrap = document.getElementById('canvas-wrap');
+
+  let data = null;
+  let cells = null;
+  let scaleColors = null;
+  let showBorders = true;
+  let showPoints = false;
+
+  function heatColor(t) {
+    t = Math.max(0, Math.min(1, t));
+    const stops = [
+      [0.00, [30, 58, 138]],
+      [0.20, [14, 165, 233]],
+      [0.45, [34, 197, 94]],
+      [0.70, [250, 204, 21]],
+      [0.85, [249, 115, 22]],
+      [1.00, [220, 38, 38]],
+    ];
+    for (let i = 0; i < stops.length - 1; i++) {
+      if (t <= stops[i + 1][0]) {
+        const [t1, c1] = stops[i];
+        const [t2, c2] = stops[i + 1];
+        const k = (t - t1) / (t2 - t1);
+        const r = Math.round(c1[0] + (c2[0] - c1[0]) * k);
+        const g = Math.round(c1[1] + (c2[1] - c1[1]) * k);
+        const b = Math.round(c1[2] + (c2[2] - c1[2]) * k);
+        return `rgb(${r},${g},${b})`;
+      }
+    }
+    return 'rgb(220,38,38)';
+  }
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = wrap.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', () => { resize(); render(); });
+
+  function render() {
+    if (!data || !cells) return;
+    const rect = wrap.getBoundingClientRect();
+    const w = rect.width, h = rect.height;
+    ctx.fillStyle = '#0b0e1a';
+    ctx.fillRect(0, 0, w, h);
+
+    const dataW = data.width, dataH = data.height;
+    const sx = w / dataW;
+    const sy = h / dataH;
+    const s = Math.min(sx, sy);
+    const ox = (w - dataW * s) / 2;
+    const oy = (h - dataH * s) / 2;
+
+    const prices = data.communities.map(c => c.price);
+    const minP = Math.min(...prices);
+    const maxP = Math.max(...prices);
+
+    for (let i = 0; i < cells.length; i++) {
+      const cell = cells[i];
+      if (!cell || cell.length < 3) continue;
+      const price = data.communities[i].price;
+      const t = (price - minP) / (maxP - minP);
+      ctx.fillStyle = heatColor(t);
+      ctx.beginPath();
+      for (let j = 0; j < cell.length; j++) {
+        const px = ox + cell[j].x * s;
+        const py = oy + cell[j].y * s;
+        if (j === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      if (showBorders) {
+        ctx.strokeStyle = 'rgba(12,15,30,0.55)';
+        ctx.lineWidth = 0.4;
+        ctx.stroke();
+      }
+    }
+
+    if (showPoints) {
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < data.communities.length; i++) {
+        const c = data.communities[i];
+        ctx.beginPath();
+        ctx.arc(ox + c.x * s, oy + c.y * s, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    canvas._transform = { s, ox, oy, dataW, dataH };
+  }
+
+  function renderScale() {
+    const sc = document.getElementById('scale-canvas');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = sc.clientWidth, h = sc.clientHeight;
+    sc.width = w * dpr; sc.height = h * dpr;
+    const sctx = sc.getContext('2d');
+    sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (let x = 0; x < w; x++) {
+      sctx.fillStyle = heatColor(x / (w - 1));
+      sctx.fillRect(x, 0, 1, h);
+    }
+  }
+
+  async function load() {
+    loading.style.display = 'flex';
+    loading.textContent = '正在加载小区数据...';
+    const res = await fetch('/api/communities');
+    data = await res.json();
+
+    const prices = data.communities.map(c => c.price);
+    const minP = Math.min(...prices), maxP = Math.max(...prices);
+    const avgP = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+    document.getElementById('stat-count').textContent = data.communities.length;
+    document.getElementById('stat-avg').textContent = avgP.toLocaleString();
+    document.getElementById('stat-max').textContent = maxP.toLocaleString();
+    document.getElementById('stat-min').textContent = minP.toLocaleString();
+    document.getElementById('scale-min').textContent = minP.toLocaleString();
+    document.getElementById('scale-mid').textContent = Math.round((minP + maxP) / 2).toLocaleString();
+    document.getElementById('scale-max').textContent = maxP.toLocaleString();
+
+    resize();
+    renderScale();
+
+    loading.textContent = '正在计算泰森多边形（纯手工算法，零第三方库）...';
+    await new Promise(r => setTimeout(r, 30));
+    const t0 = performance.now();
+    cells = Voronoi.voronoiCells(data.communities, {
+      minX: 0, minY: 0, maxX: data.width, maxY: data.height
+    });
+    const t1 = performance.now();
+    loading.style.display = 'none';
+    loading.textContent = `已完成（用时 ${Math.round(t1 - t0)}ms）`;
+    render();
+  }
+
+  document.getElementById('toggle-borders').addEventListener('change', e => {
+    showBorders = e.target.checked; render();
+  });
+  document.getElementById('toggle-points').addEventListener('change', e => {
+    showPoints = e.target.checked; render();
+  });
+  document.getElementById('btn-recompute').addEventListener('click', () => {
+    cells = null; load();
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if (!data || !cells) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const { s, ox, oy } = canvas._transform || { s: 1, ox: 0, oy: 0 };
+    const px = (mx - ox) / s;
+    const py = (my - oy) / s;
+    let best = -1, bestD = Infinity;
+    const cs = data.communities;
+    for (let i = 0; i < cs.length; i++) {
+      const dx = cs[i].x - px, dy = cs[i].y - py;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    if (best >= 0) {
+      const c = cs[best];
+      hover.style.display = 'block';
+      hover.innerHTML = `最近小区 #${c.id} · 坐标(${c.x.toFixed(1)},${c.y.toFixed(1)}) · <b>¥${c.price.toLocaleString()} /㎡</b>`;
+    }
+  });
+  canvas.addEventListener('mouseleave', () => { hover.style.display = 'none'; });
+
+  resize();
+  load();
+})();
+</script>
+</body>
+</html>
