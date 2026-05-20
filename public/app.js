@@ -1,5 +1,4 @@
 const DAY = 24 * 60 * 60 * 1000;
-const HOUR = 60 * 60 * 1000;
 const CELL_WIDTH = 120;
 const ROW_HEIGHT = 50;
 
@@ -10,7 +9,8 @@ let state = {
     viewEnd: null,
     totalDays: 21,
     dragging: null,
-    resizing: null
+    resizing: null,
+    ghost: null
 };
 
 const colors = [
@@ -31,6 +31,10 @@ const elements = {
     tooltip: document.getElementById('tooltip'),
     ganttContainer: document.getElementById('ganttContainer')
 };
+
+function snapToGrid(value, gridSize) {
+    return Math.round(value / gridSize) * gridSize;
+}
 
 function init() {
     const now = new Date();
@@ -243,8 +247,11 @@ function calculateBarPosition(booking) {
     const checkIn = Math.max(booking.check_in, state.viewStart);
     const checkOut = Math.min(booking.check_out, state.viewEnd);
     
-    const left = ((checkIn - state.viewStart) / DAY) * CELL_WIDTH;
-    const width = Math.max(((checkOut - checkIn) / DAY) * CELL_WIDTH, 20);
+    const daysFromStart = (checkIn - state.viewStart) / DAY;
+    const left = snapToGrid(daysFromStart * CELL_WIDTH, CELL_WIDTH);
+    
+    const durationDays = (checkOut - checkIn) / DAY;
+    const width = Math.max(snapToGrid(durationDays * CELL_WIDTH, CELL_WIDTH), CELL_WIDTH);
     
     return { left, width };
 }
@@ -266,20 +273,42 @@ function getBookingColor(booking) {
     return colors[booking.id % colors.length];
 }
 
+function createGhost(booking, color, left, top, width) {
+    const ghost = document.createElement('div');
+    ghost.className = 'booking-bar ghost';
+    ghost.style.left = `${left}px`;
+    ghost.style.top = `${top}px`;
+    ghost.style.width = `${width}px`;
+    ghost.style.background = `linear-gradient(135deg, ${color} 0%, ${adjustColor(color, -20)} 100%)`;
+    ghost.style.opacity = '0.7';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.zIndex = '100';
+    ghost.innerHTML = `<span class="guest-name">${booking.guest_name || '未命名'}</span>`;
+    return ghost;
+}
+
 function startDragging(booking, e) {
     e.preventDefault();
     const bar = e.currentTarget;
-    bar.classList.add('dragging');
+    bar.style.opacity = '0.3';
     
     const roomIndex = state.rooms.findIndex(r => r.number === booking.room_number);
+    const { left, width } = calculateBarPosition(booking);
+    const top = roomIndex * ROW_HEIGHT + 6;
+    
+    const color = getBookingColor(booking);
+    const ghost = createGhost(booking, color, left, top, width);
+    elements.ganttBars.appendChild(ghost);
     
     state.dragging = {
         booking,
         bar,
+        ghost,
         startX: e.clientX,
         startY: e.clientY,
-        startLeft: parseFloat(bar.style.left),
-        startTop: parseFloat(bar.style.top),
+        startLeft: left,
+        startTop: top,
+        startWidth: width,
         startRoomIndex: roomIndex,
         originalCheckIn: booking.check_in,
         originalCheckOut: booking.check_out,
@@ -291,15 +320,25 @@ function startResizing(booking, side, e) {
     e.preventDefault();
     e.stopPropagation();
     const bar = e.currentTarget.parentElement;
-    bar.classList.add('dragging');
+    bar.style.opacity = '0.3';
+    
+    const roomIndex = state.rooms.findIndex(r => r.number === booking.room_number);
+    const { left, width } = calculateBarPosition(booking);
+    const top = roomIndex * ROW_HEIGHT + 6;
+    
+    const color = getBookingColor(booking);
+    const ghost = createGhost(booking, color, left, top, width);
+    elements.ganttBars.appendChild(ghost);
     
     state.resizing = {
         booking,
         bar,
+        ghost,
         side,
         startX: e.clientX,
-        startLeft: parseFloat(bar.style.left),
-        startWidth: parseFloat(bar.style.width),
+        startLeft: left,
+        startWidth: width,
+        startTop: top,
         originalCheckIn: booking.check_in,
         originalCheckOut: booking.check_out
     };
@@ -321,24 +360,18 @@ function handleDrag(e) {
     const dayDelta = Math.round(dx / CELL_WIDTH);
     const roomDelta = Math.round(dy / ROW_HEIGHT);
     
-    let newRoomIndex = Math.max(0, Math.min(state.rooms.length - 1, dragging.startRoomIndex + roomDelta));
-    const newRoomNumber = state.rooms[newRoomIndex].number;
+    const newRoomIndex = Math.max(0, Math.min(state.rooms.length - 1, dragging.startRoomIndex + roomDelta));
     
-    const duration = dragging.originalCheckOut - dragging.originalCheckIn;
-    let newCheckIn = dragging.originalCheckIn + dayDelta * DAY;
-    let newCheckOut = newCheckIn + duration;
-    
-    if (checkCollision(dragging.booking.id, newRoomNumber, newCheckIn, newCheckOut)) {
-        dragging.bar.classList.add('conflict');
-    } else {
-        dragging.bar.classList.remove('conflict');
-    }
-    
-    const newLeft = Math.max(0, dragging.startLeft + dayDelta * CELL_WIDTH);
+    const newLeft = snapToGrid(Math.max(0, dragging.startLeft + dayDelta * CELL_WIDTH), CELL_WIDTH);
     const newTop = newRoomIndex * ROW_HEIGHT + 6;
     
-    dragging.bar.style.left = `${newLeft}px`;
-    dragging.bar.style.top = `${newTop}px`;
+    dragging.ghost.style.left = `${newLeft}px`;
+    dragging.ghost.style.top = `${newTop}px`;
+    
+    const duration = dragging.originalCheckOut - dragging.originalCheckIn;
+    const newCheckIn = dragging.originalCheckIn + dayDelta * DAY;
+    const newCheckOut = newCheckIn + duration;
+    const newRoomNumber = state.rooms[newRoomIndex].number;
     
     dragging.pending = {
         roomNumber: newRoomNumber,
@@ -364,19 +397,13 @@ function handleResize(e) {
         newCheckOut = Math.max(newCheckIn + DAY, resizing.originalCheckOut + dayDelta * DAY);
     }
     
-    if (checkCollision(resizing.booking.id, resizing.booking.room_number, newCheckIn, newCheckOut)) {
-        resizing.bar.classList.add('conflict');
-    } else {
-        resizing.bar.classList.remove('conflict');
-    }
-    
     const { left, width } = calculateBarPosition({
         check_in: newCheckIn,
         check_out: newCheckOut
     });
     
-    resizing.bar.style.left = `${left}px`;
-    resizing.bar.style.width = `${width}px`;
+    resizing.ghost.style.left = `${left}px`;
+    resizing.ghost.style.width = `${width}px`;
     
     resizing.pending = {
         checkIn: newCheckIn,
@@ -387,19 +414,29 @@ function handleResize(e) {
 async function handleMouseUp() {
     if (state.dragging) {
         const { dragging } = state;
-        dragging.bar.classList.remove('dragging', 'conflict');
         
-        if (dragging.pending && !checkCollision(
-            dragging.booking.id,
-            dragging.pending.roomNumber,
-            dragging.pending.checkIn,
-            dragging.pending.checkOut
-        )) {
-            dragging.booking.room_number = dragging.pending.roomNumber;
-            dragging.booking.check_in = dragging.pending.checkIn;
-            dragging.booking.check_out = dragging.pending.checkOut;
+        if (dragging.ghost) {
+            dragging.ghost.remove();
+        }
+        dragging.bar.style.opacity = '1';
+        
+        if (dragging.pending) {
+            const hasConflict = checkCollision(
+                dragging.booking.id,
+                dragging.pending.roomNumber,
+                dragging.pending.checkIn,
+                dragging.pending.checkOut
+            );
             
-            await saveBooking(dragging.booking);
+            if (!hasConflict) {
+                dragging.booking.room_number = dragging.pending.roomNumber;
+                dragging.booking.check_in = dragging.pending.checkIn;
+                dragging.booking.check_out = dragging.pending.checkOut;
+                await saveBooking(dragging.booking);
+            } else {
+                dragging.bar.classList.add('conflict');
+                setTimeout(() => dragging.bar.classList.remove('conflict'), 300);
+            }
         }
         
         render();
@@ -408,18 +445,28 @@ async function handleMouseUp() {
     
     if (state.resizing) {
         const { resizing } = state;
-        resizing.bar.classList.remove('dragging', 'conflict');
         
-        if (resizing.pending && !checkCollision(
-            resizing.booking.id,
-            resizing.booking.room_number,
-            resizing.pending.checkIn,
-            resizing.pending.checkOut
-        )) {
-            resizing.booking.check_in = resizing.pending.checkIn;
-            resizing.booking.check_out = resizing.pending.checkOut;
+        if (resizing.ghost) {
+            resizing.ghost.remove();
+        }
+        resizing.bar.style.opacity = '1';
+        
+        if (resizing.pending) {
+            const hasConflict = checkCollision(
+                resizing.booking.id,
+                resizing.booking.room_number,
+                resizing.pending.checkIn,
+                resizing.pending.checkOut
+            );
             
-            await saveBooking(resizing.booking);
+            if (!hasConflict) {
+                resizing.booking.check_in = resizing.pending.checkIn;
+                resizing.booking.check_out = resizing.pending.checkOut;
+                await saveBooking(resizing.booking);
+            } else {
+                resizing.bar.classList.add('conflict');
+                setTimeout(() => resizing.bar.classList.remove('conflict'), 300);
+            }
         }
         
         render();
@@ -463,7 +510,7 @@ function renderTodayLine() {
         line.className = 'today-line';
         
         const now = Date.now();
-        const offset = ((now - state.viewStart) / DAY) * CELL_WIDTH;
+        const offset = snapToGrid(((now - state.viewStart) / DAY) * CELL_WIDTH, CELL_WIDTH / 24);
         line.style.left = `${offset}px`;
         line.style.height = `${state.rooms.length * ROW_HEIGHT}px`;
         
