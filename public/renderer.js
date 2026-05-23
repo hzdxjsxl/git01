@@ -10,12 +10,15 @@ class WindTunnelRenderer {
     this.windLines = null;
     this.windLineMaterial = null;
     this.windLineGeo = null;
-    this.particles = null;
+    this.windLinePositions = null;
+    this.windLineColors = null;
     this.clock = null;
     this.solver = null;
     this.windParticles = null;
     this.animating = false;
-    this.stats = null;
+    this._lastTime = 0;
+    this._frameAccumulator = 0;
+    this._fixedDt = 1 / 60;
 
     this.init();
   }
@@ -23,22 +26,22 @@ class WindTunnelRenderer {
   init() {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0a1a);
-    this.scene.fog = new THREE.Fog(0x0a0a1a, 200, 600);
+    this.scene.fog = new THREE.Fog(0x0a0a1a, 250, 650);
 
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
 
-    this.camera = new THREE.PerspectiveCamera(60, width / height, 0.5, 2000);
-    this.camera.position.set(180, 120, 200);
+    this.camera = new THREE.PerspectiveCamera(55, width / height, 0.5, 2000);
+    this.camera.position.set(200, 130, 220);
     this.camera.lookAt(0, 60, 0);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.2;
+    this.renderer.toneMappingExposure = 1.15;
     this.container.appendChild(this.renderer.domElement);
 
     this.addLights();
@@ -60,38 +63,38 @@ class WindTunnelRenderer {
   }
 
   addLights() {
-    const ambient = new THREE.AmbientLight(0x404060, 0.6);
+    const ambient = new THREE.AmbientLight(0x404060, 0.65);
     this.scene.add(ambient);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    dirLight.position.set(150, 200, 100);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.3);
+    dirLight.position.set(180, 220, 120);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 2048;
     dirLight.shadow.mapSize.height = 2048;
     dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 600;
-    dirLight.shadow.camera.left = -200;
-    dirLight.shadow.camera.right = 200;
-    dirLight.shadow.camera.top = 200;
-    dirLight.shadow.camera.bottom = -200;
+    dirLight.shadow.camera.far = 700;
+    dirLight.shadow.camera.left = -250;
+    dirLight.shadow.camera.right = 250;
+    dirLight.shadow.camera.top = 250;
+    dirLight.shadow.camera.bottom = -250;
     dirLight.shadow.bias = -0.001;
     this.scene.add(dirLight);
 
-    const fillLight = new THREE.DirectionalLight(0x8899ff, 0.3);
-    fillLight.position.set(-100, 80, -100);
+    const fillLight = new THREE.DirectionalLight(0x8899ff, 0.35);
+    fillLight.position.set(-120, 90, -100);
     this.scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xff6644, 0.2);
-    rimLight.position.set(-50, 60, 150);
+    const rimLight = new THREE.DirectionalLight(0xff6644, 0.25);
+    rimLight.position.set(-50, 70, 160);
     this.scene.add(rimLight);
   }
 
   addGround() {
-    const groundGeo = new THREE.PlaneGeometry(800, 800);
+    const groundGeo = new THREE.PlaneGeometry(900, 900);
     const groundMat = new THREE.MeshStandardMaterial({
       color: 0x1a1a2e,
-      roughness: 0.9,
-      metalness: 0.1
+      roughness: 0.92,
+      metalness: 0.08
     });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
@@ -99,7 +102,7 @@ class WindTunnelRenderer {
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    const gridHelper = new THREE.GridHelper(600, 60, 0x222244, 0x1a1a30);
+    const gridHelper = new THREE.GridHelper(700, 70, 0x222244, 0x1a1a30);
     gridHelper.position.y = -19.9;
     this.scene.add(gridHelper);
   }
@@ -108,22 +111,22 @@ class WindTunnelRenderer {
     const arrowGroup = new THREE.Group();
     for (let i = 0; i < 10; i++) {
       const dir = new THREE.Vector3(1, 0, 0);
-      const origin = new THREE.Vector3(-150, 10 + i * 18, -50 + i * 10);
-      const arrow = new THREE.ArrowHelper(dir, origin, 30, 0x00ffaa, 8, 4);
+      const origin = new THREE.Vector3(-160, 10 + i * 20, -55 + i * 11);
+      const arrow = new THREE.ArrowHelper(dir, origin, 35, 0x00ffaa, 10, 5);
       arrowGroup.add(arrow);
     }
     this.scene.add(arrowGroup);
   }
 
   addBoundingBox() {
-    const boxGeo = new THREE.BoxGeometry(220, 260, 180);
+    const boxGeo = new THREE.BoxGeometry(240, 280, 190);
     const edges = new THREE.EdgesGeometry(boxGeo);
     const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({
       color: 0x334466,
       transparent: true,
-      opacity: 0.3
+      opacity: 0.25
     }));
-    line.position.set(0, 90, 0);
+    line.position.set(0, 95, 0);
     this.scene.add(line);
   }
 
@@ -136,7 +139,6 @@ class WindTunnelRenderer {
 
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(faces.length * 3 * 3);
-    const normals = new Float32Array(faces.length * 3 * 3);
 
     for (let f = 0; f < faces.length; f++) {
       const face = faces[f];
@@ -154,8 +156,8 @@ class WindTunnelRenderer {
 
     const material = new THREE.MeshStandardMaterial({
       color: 0x4a6fa5,
-      roughness: 0.4,
-      metalness: 0.6,
+      roughness: 0.38,
+      metalness: 0.65,
       side: THREE.DoubleSide
     });
 
@@ -167,7 +169,7 @@ class WindTunnelRenderer {
     const lineMaterial = new THREE.LineBasicMaterial({
       color: 0x6688bb,
       transparent: true,
-      opacity: 0.6
+      opacity: 0.55
     });
     const wireframe = new THREE.LineSegments(edges, lineMaterial);
     mesh.add(wireframe);
@@ -179,8 +181,10 @@ class WindTunnelRenderer {
   }
 
   setupWindVisuals() {
-    this.windLinePositions = new Float32Array(200000 * 3 * 2);
-    this.windLineColors = new Float32Array(200000 * 3 * 2);
+    const maxSegments = this.windParticles ? this.windParticles.maxSegments : 200000;
+    this.windLinePositions = new Float32Array(maxSegments * 6);
+    this.windLineColors = new Float32Array(maxSegments * 6);
+
     this.windLineGeo = new THREE.BufferGeometry();
     this.windLineGeo.setAttribute('position', new THREE.BufferAttribute(this.windLinePositions, 3));
     this.windLineGeo.setAttribute('color', new THREE.BufferAttribute(this.windLineColors, 3));
@@ -188,9 +192,10 @@ class WindTunnelRenderer {
     this.windLineMaterial = new THREE.LineBasicMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.9,
       blending: THREE.AdditiveBlending,
-      depthWrite: false
+      depthWrite: false,
+      linewidth: 1
     });
 
     this.windLines = new THREE.LineSegments(this.windLineGeo, this.windLineMaterial);
@@ -198,61 +203,24 @@ class WindTunnelRenderer {
     this.scene.add(this.windLines);
   }
 
-  updateWindVisuals(segments) {
-    if (!this.windLineGeo) return;
+  updateWindVisuals() {
+    if (!this.windLineGeo || !this.windParticles) return;
 
-    const maxSegments = 200000;
-    const numSegments = Math.min(segments.length, maxSegments);
+    const lineData = this.windParticles.getLineData();
+    const srcPositions = lineData.positions;
+    const srcColors = lineData.colors;
+    const count = lineData.count;
 
-    for (let i = 0; i < numSegments; i++) {
-      const seg = segments[i];
-      const posIdx = i * 6;
-      this.windLinePositions[posIdx] = seg.from[0];
-      this.windLinePositions[posIdx + 1] = seg.from[1];
-      this.windLinePositions[posIdx + 2] = seg.from[2];
-      this.windLinePositions[posIdx + 3] = seg.to[0];
-      this.windLinePositions[posIdx + 4] = seg.to[1];
-      this.windLinePositions[posIdx + 5] = seg.to[2];
+    const dstPositions = this.windLinePositions;
+    const dstColors = this.windLineColors;
 
-      const speed = Math.sqrt(
-        seg.speed[0] * seg.speed[0] +
-        seg.speed[1] * seg.speed[1] +
-        seg.speed[2] * seg.speed[2]
-      );
-      const speedNorm = Math.min(speed / 10, 1);
-
-      const hue = 0.55 - speedNorm * 0.45;
-      const color = new THREE.Color();
-      color.setHSL(hue, 1.0, 0.4 + speedNorm * 0.3);
-
-      const alpha = seg.alpha;
-      this.windLineColors[posIdx] = color.r * alpha;
-      this.windLineColors[posIdx + 1] = color.g * alpha;
-      this.windLineColors[posIdx + 2] = color.b * alpha;
-      this.windLineColors[posIdx + 3] = color.r * alpha * 1.1;
-      this.windLineColors[posIdx + 4] = color.g * alpha * 1.1;
-      this.windLineColors[posIdx + 5] = color.b * alpha * 1.1;
-    }
-
-    for (let i = numSegments; i < maxSegments; i++) {
-      const posIdx = i * 6;
-      this.windLinePositions[posIdx] = 0;
-      this.windLinePositions[posIdx + 1] = -1000;
-      this.windLinePositions[posIdx + 2] = 0;
-      this.windLinePositions[posIdx + 3] = 0;
-      this.windLinePositions[posIdx + 4] = -1000;
-      this.windLinePositions[posIdx + 5] = 0;
-      this.windLineColors[posIdx] = 0;
-      this.windLineColors[posIdx + 1] = 0;
-      this.windLineColors[posIdx + 2] = 0;
-      this.windLineColors[posIdx + 3] = 0;
-      this.windLineColors[posIdx + 4] = 0;
-      this.windLineColors[posIdx + 5] = 0;
-    }
+    const copyLen = Math.min(count * 6, dstPositions.length);
+    dstPositions.set(srcPositions.subarray(0, copyLen));
+    dstColors.set(srcColors.subarray(0, copyLen));
 
     this.windLineGeo.attributes.position.needsUpdate = true;
     this.windLineGeo.attributes.color.needsUpdate = true;
-    this.windLineGeo.setDrawRange(0, numSegments * 2);
+    this.windLineGeo.setDrawRange(0, count * 2);
   }
 
   setSolver(solver, windParticles) {
@@ -264,18 +232,28 @@ class WindTunnelRenderer {
   animate() {
     if (this.animating) return;
     this.animating = true;
+    this._lastTime = performance.now();
 
     const animate = () => {
       if (!this.animating) return;
       requestAnimationFrame(animate);
 
-      const dt = Math.min(this.clock.getDelta(), 0.033);
+      const now = performance.now();
+      const frameTime = Math.min((now - this._lastTime) / 1000, 0.1);
+      this._lastTime = now;
 
-      if (this.solver) {
-        this.solver.step();
-        this.windParticles.update(this.solver.dt);
-        const segments = this.windParticles.getLineSegments();
-        this.updateWindVisuals(segments);
+      if (this.solver && this.windParticles) {
+        this._frameAccumulator += frameTime;
+
+        let subSteps = 0;
+        while (this._frameAccumulator >= this._fixedDt && subSteps < 3) {
+          this.solver.step();
+          this.windParticles.update(this.solver.dt);
+          this._frameAccumulator -= this._fixedDt;
+          subSteps++;
+        }
+
+        this.updateWindVisuals();
       }
 
       this.controls.update();

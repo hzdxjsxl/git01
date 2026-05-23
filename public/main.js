@@ -1,4 +1,4 @@
-const GRID_RESOLUTION = 38;
+const GRID_RESOLUTION = 42;
 
 async function init() {
   const statusEl = document.getElementById('status');
@@ -7,6 +7,8 @@ async function init() {
   const windSpeedVal = document.getElementById('windSpeedVal');
   const viscosityEl = document.getElementById('viscosity');
   const viscosityVal = document.getElementById('viscosityVal');
+  const vorticityEl = document.getElementById('vorticity');
+  const vorticityVal = document.getElementById('vorticityVal');
   const particleCountEl = document.getElementById('particleCount');
   const particleCountVal = document.getElementById('particleCountVal');
   const resetBtn = document.getElementById('resetBtn');
@@ -29,13 +31,14 @@ async function init() {
 
     const fluidConfig = {
       nx: GRID_RESOLUTION,
-      ny: Math.round(GRID_RESOLUTION * 260 / 220),
-      nz: Math.round(GRID_RESOLUTION * 180 / 220),
+      ny: Math.round(GRID_RESOLUTION * 270 / 240),
+      nz: Math.round(GRID_RESOLUTION * 190 / 240),
       cellSize: 1.0,
-      dt: 0.1,
+      dt: 0.08,
       viscosity: parseFloat(viscosityEl.value),
       windDir: [1, 0, 0],
       windSpeed: parseFloat(windSpeedEl.value),
+      vorticityConfinement: parseFloat(vorticityEl.value),
       bounds: bounds
     };
 
@@ -46,9 +49,9 @@ async function init() {
 
     const particleConfig = {
       numParticles: parseInt(particleCountEl.value),
-      maxTrailLength: 25
+      maxTrailLength: 30
     };
-    const windParticles = new WindParticles(solver, particleConfig);
+    let windParticles = new WindParticles(solver, particleConfig);
 
     renderer.setSolver(solver, windParticles);
 
@@ -69,14 +72,22 @@ async function init() {
       solver.viscosity = val;
     });
 
+    vorticityEl.addEventListener('input', () => {
+      const val = parseFloat(vorticityEl.value);
+      vorticityVal.textContent = val.toFixed(1);
+      solver.vorticityConfinement = val;
+    });
+
     particleCountEl.addEventListener('change', () => {
       const val = parseInt(particleCountEl.value);
       particleCountVal.textContent = val;
-      windParticles.numParticles = val;
-      windParticles.positions = new Float32Array(val * 3);
-      windParticles.trails = [];
-      windParticles.alive = new Uint8Array(val);
-      windParticles.init();
+
+      const newConfig = {
+        numParticles: val,
+        maxTrailLength: windParticles.maxTrailLength
+      };
+      windParticles = new WindParticles(solver, newConfig);
+      renderer.setSolver(solver, windParticles);
     });
 
     resetBtn.addEventListener('click', () => {
@@ -84,6 +95,10 @@ async function init() {
       solver.v.fill(0);
       solver.w.fill(0);
       solver.p.fill(0);
+      solver.curlX.fill(0);
+      solver.curlY.fill(0);
+      solver.curlZ.fill(0);
+      solver.curlMag.fill(0);
       windParticles.init();
       statusEl.textContent = '已重置仿真';
       setTimeout(() => {
