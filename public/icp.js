@@ -44,10 +44,9 @@ function jacobiEigen3x3(A, maxSweeps = 60, tol = 1e-14) {
         if (Math.abs(apq) < tol) continue;
         if (Math.abs(apq) < tresh && sweep > 3) continue;
         const t = app - aqq;
-        const zeta = -0.5 * t / apq;
-        const t2 = 1 / (zeta + Math.sqrt(1 + zeta*zeta));
-        const c = 1 / Math.sqrt(1 + t2*t2);
-        const s = t2 * c;
+        const theta = 0.5 * Math.atan2(2 * apq, t);
+        const c = Math.cos(theta);
+        const s = Math.sin(theta);
         const cs = c * s;
         if (p === 0 && q === 1) {
           a11 = c*c*app + 2*cs*apq + s*s*aqq;
