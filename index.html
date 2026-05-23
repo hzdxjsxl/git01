@@ -26,6 +26,14 @@
   #legend .row { display: flex; align-items: center; margin: 4px 0; }
   #legend .swatch { width: 20px; height: 14px; margin-right: 8px; border: 1px solid #333; border-radius: 2px; }
   #tooltip { position: absolute; background: rgba(0,0,0,0.9); color: #fff; padding: 8px 12px; border-radius: 4px; font-size: 12px; pointer-events: none; display: none; border: 1px solid #1e3a5f; z-index: 100; }
+  #control-panel { position: absolute; top: 12px; right: 12px; background: rgba(17,24,39,0.9); padding: 12px 14px; border-radius: 6px; font-size: 12px; border: 1px solid #1e3a5f; }
+  #control-panel h4 { margin-bottom: 8px; color: #93c5fd; }
+  #control-panel .metric { display: flex; justify-content: space-between; margin: 4px 0; font-family: monospace; }
+  #control-panel .metric .label { color: #94a3b8; }
+  #control-panel .metric .value { color: #4ade80; }
+  #control-panel button { margin-top: 8px; padding: 6px 12px; background: #1e3a5f; border: 1px solid #3b82f6; color: #fff; border-radius: 4px; cursor: pointer; font-size: 11px; width: 100%; }
+  #control-panel button:hover { background: #2563eb; }
+  #control-panel button.active { background: #dc2626; border-color: #ef4444; }
 </style>
 </head>
 <body>
@@ -42,6 +50,14 @@
       <div class="row"><div class="swatch" style="background:#6b7280"></div>势均力敌</div>
     </div>
     <div id="tooltip"></div>
+    <div id="control-panel">
+      <h4>性能监控</h4>
+      <div class="metric"><span class="label">渲染帧率:</span><span class="value" id="fps-display">--</span></div>
+      <div class="metric"><span class="label">消息总数:</span><span class="value" id="msg-display">0</span></div>
+      <div class="metric"><span class="label">推送间隔:</span><span class="value" id="interval-display">1000ms</span></div>
+      <div class="metric"><span class="label">重绘节流:</span><span class="value" style="color:#60a5fa">rAF</span></div>
+      <button id="stress-btn">开启压力测试</button>
+    </div>
   </div>
   <div id="sidebar">
     <h3>各选区实时票数</h3>
@@ -79,12 +95,23 @@ for (const [id, pts] of Object.entries(DISTRICT_BOUNDARIES)) {
 
 let districtsMeta = {};
 let totals = {};
-let incrementsQueue = [];
 let lastUpdateTime = 0;
+let dirty = false;
+let rafId = null;
+let msgCount = 0;
+let fpsCount = 0;
+let lastFpsTime = performance.now();
+let currentFps = 0;
+let currentWs = null;
+let stressEnabled = false;
 
 const statusEl = document.getElementById('status');
 const tooltipEl = document.getElementById('tooltip');
 const listEl = document.getElementById('district-list');
+const fpsDisplay = document.getElementById('fps-display');
+const msgDisplay = document.getElementById('msg-display');
+const intervalDisplay = document.getElementById('interval-display');
+const stressBtn = document.getElementById('stress-btn');
 
 function getColor(votesA, votesB) {
   const total = votesA + votesB;
@@ -223,6 +250,41 @@ function pointInPolygon(px, py, pts) {
   return inside;
 }
 
+function renderLoop() {
+  fpsCount++;
+  const now = performance.now();
+  if (now - lastFpsTime >= 1000) {
+    currentFps = fpsCount;
+    fpsCount = 0;
+    lastFpsTime = now;
+    fpsDisplay.textContent = currentFps + ' FPS';
+    msgDisplay.textContent = msgCount;
+  }
+
+  if (dirty) {
+    drawMap();
+    updateSidebar();
+    dirty = false;
+  }
+  rafId = requestAnimationFrame(renderLoop);
+}
+
+stressBtn.addEventListener('click', () => {
+  stressEnabled = !stressEnabled;
+  if (currentWs && currentWs.readyState === WebSocket.OPEN) {
+    currentWs.send(JSON.stringify({ type: 'stress', enabled: stressEnabled, interval: 50 }));
+  }
+  if (stressEnabled) {
+    stressBtn.textContent = '关闭压力测试';
+    stressBtn.classList.add('active');
+    intervalDisplay.textContent = '50ms (高压)';
+  } else {
+    stressBtn.textContent = '开启压力测试';
+    stressBtn.classList.remove('active');
+    intervalDisplay.textContent = '1000ms (正常)';
+  }
+});
+
 function processIncoming(msg) {
   try {
     const data = JSON.parse(msg.data);
@@ -247,8 +309,8 @@ function processIncoming(msg) {
       lastUpdateTime = data.timestamp;
     }
 
-    drawMap();
-    updateSidebar();
+    msgCount++;
+    dirty = true;
   } catch (err) {
     console.error('Parse error:', err);
   }
@@ -256,22 +318,22 @@ function processIncoming(msg) {
 
 function connect() {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${protocol}://${location.host}`);
+  currentWs = new WebSocket(`${protocol}://${location.host}`);
 
-  ws.onopen = () => {
+  currentWs.onopen = () => {
     statusEl.textContent = 'WebSocket 已连接';
     statusEl.style.color = '#60a5fa';
   };
 
-  ws.onmessage = processIncoming;
+  currentWs.onmessage = processIncoming;
 
-  ws.onclose = () => {
+  currentWs.onclose = () => {
     statusEl.textContent = '连接断开，正在重连...';
     statusEl.style.color = '#f59e0b';
     setTimeout(connect, 2000);
   };
 
-  ws.onerror = () => {
+  currentWs.onerror = () => {
     statusEl.textContent = '连接错误，正在重连...';
     statusEl.style.color = '#ef4444';
   };
@@ -280,6 +342,7 @@ function connect() {
 connect();
 drawMap();
 updateSidebar();
+rafId = requestAnimationFrame(renderLoop);
 </script>
 </body>
 </html>
