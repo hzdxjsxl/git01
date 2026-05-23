@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>风洞测试沙盒 - 3D Building Wind Tunnel</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #0a0a1a;
+      color: #e0e0e0;
+      overflow: hidden;
+    }
+
+    #container {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    #ui-panel {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(15, 20, 40, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(100, 150, 255, 0.3);
+      border-radius: 12px;
+      padding: 20px;
+      width: 300px;
+      z-index: 100;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    #ui-panel h1 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #6ab0ff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #ui-panel h1::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: linear-gradient(135deg, #00ffaa, #0088ff);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    .control-group {
+      margin-bottom: 16px;
+    }
+
+    .control-group label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: #a0b0c0;
+    }
+
+    .control-group .value {
+      color: #6ab0ff;
+      font-weight: 500;
+      font-family: 'Consolas', 'Monaco', monospace;
+    }
+
+    .control-group input[type="range"] {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: linear-gradient(90deg, #1a2a4a, #2a4a7a);
+      border-radius: 3px;
+      outline: none;
+    }
+
+    .control-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: linear-gradient(135deg, #6ab0ff, #0088ff);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(100, 150, 255, 0.6);
+    }
+
+    .control-group select {
+      width: 100%;
+      padding: 6px 10px;
+      background: #1a2a4a;
+      border: 1px solid #3a4a6a;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .button-group button {
+      flex: 1;
+      padding: 10px 16px;
+      background: linear-gradient(135deg, #2a4a7a, #1a3a5a);
+      border: 1px solid #3a5a8a;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .button-group button:hover {
+      background: linear-gradient(135deg, #3a5a8a, #2a4a7a);
+      border-color: #4a7aaa;
+      box-shadow: 0 0 12px rgba(100, 150, 255, 0.4);
+    }
+
+    .button-group button:active {
+      transform: scale(0.97);
+    }
+
+    #info-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(15, 20, 40, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(100, 150, 255, 0.3);
+      border-radius: 12px;
+      padding: 16px 20px;
+      z-index: 100;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    #status {
+      font-size: 13px;
+      color: #6ab0ff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #status::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: #00ffaa;
+      border-radius: 50%;
+      animation: blink 1s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    #legend {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(15, 20, 40, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(100, 150, 255, 0.3);
+      border-radius: 12px;
+      padding: 16px 20px;
+      z-index: 100;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    #legend h3 {
+      font-size: 12px;
+      color: #a0b0c0;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .legend-bar {
+      width: 120px;
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #000088, #0044aa, #0088ff, #00ffaa, #ffff00, #ff8800, #ff0000);
+    }
+
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      width: 120px;
+      font-size: 10px;
+      color: #8090a0;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+
+  <div id="ui-panel">
+    <h1>风洞测试沙盒</h1>
+
+    <div class="control-group">
+      <label>
+        <span>风速</span>
+        <span class="value" id="windSpeedVal">6.0</span>
+      </label>
+      <input type="range" id="windSpeed" min="1" max="15" step="0.5" value="6">
+    </div>
+
+    <div class="control-group">
+      <label>
+        <span>粘性系数</span>
+        <span class="value" id="viscosityVal">5.0e-5</span>
+      </label>
+      <input type="range" id="viscosity" min="1e-6" max="1e-3" step="1e-6" value="5e-5">
+    </div>
+
+    <div class="control-group">
+      <label>
+        <span>粒子数量</span>
+        <span class="value" id="particleCountVal">600</span>
+      </label>
+      <select id="particleCount">
+        <option value="200">200</option>
+        <option value="400">400</option>
+        <option value="600" selected>600</option>
+        <option value="800">800</option>
+        <option value="1000">1000</option>
+        <option value="1500">1500</option>
+      </select>
+    </div>
+
+    <div class="button-group">
+      <button id="pauseBtn">暂停</button>
+      <button id="resetBtn">重置</button>
+    </div>
+  </div>
+
+  <div id="info-panel">
+    <div id="status">正在初始化...</div>
+  </div>
+
+  <div id="legend">
+    <h3>风速图例</h3>
+    <div class="legend-item">
+      <div>
+        <div class="legend-bar"></div>
+        <div class="legend-labels">
+          <span>慢</span>
+          <span>快</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="fluidSolver.js"></script>
+  <script src="renderer.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
