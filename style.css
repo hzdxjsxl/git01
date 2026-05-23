@@ -1,0 +1,32 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0f1a; color: #dce3ef; font-family: -apple-system, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif; }
+#canvas { position: fixed; inset: 0; display: block; cursor: grab; touch-action: none; }
+#canvas.grabbing { cursor: grabbing; }
+
+#hud {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 5;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 16px 24px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(11,15,26,0.85) 0%, rgba(11,15,26,0) 100%);
+}
+.hud-left .title { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+.hud-left .sub { font-size: 12px; opacity: 0.6; margin-top: 4px; letter-spacing: 0.5px; }
+.hud-right { text-align: right; }
+#stats { display: inline-flex; gap: 18px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 8px 14px; border-radius: 8px; backdrop-filter: blur(6px); }
+#stats > div { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+#stats .k { font-size: 11px; opacity: 0.55; letter-spacing: 0.5px; }
+#stats .v { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #7fd1ff; }
+.tips { font-size: 11px; opacity: 0.45; margin-top: 6px; }
+
+#overlay {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(11,15,26,0.9); transition: opacity 0.4s;
+}
+#overlay.hide { opacity: 0; pointer-events: none; }
+#spinner {
+  width: 42px; height: 42px; border: 3px solid rgba(127,209,255,0.2);
+  border-top-color: #7fd1ff; border-radius: 50%; animation: spin 0.9s linear infinite;
+}
+#loading { margin-top: 18px; font-size: 14px; opacity: 0.85; letter-spacing: 1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
