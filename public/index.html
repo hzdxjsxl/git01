@@ -559,42 +559,117 @@
   function drawLabels(cx, cy, labelRadius, outerRadius) {
     const { arcs } = chordData;
 
-    arcs.forEach((arc, i) => {
-      ctx.save();
-      ctx.translate(cx, cy);
+    const labelHeight = 22;
+    const labelGap = 4;
+    const minDistance = labelHeight + labelGap;
 
+    const leftLabels = [];
+    const rightLabels = [];
+
+    arcs.forEach((arc, i) => {
       const angle = arc.midAngle;
       const isRight = Math.cos(angle) > 0;
-
       const pt = arcPoint(angle, labelRadius);
 
-      const isSelected = selectedProvince === i;
+      (isRight ? rightLabels : leftLabels).push({
+        arc,
+        index: i,
+        angle,
+        baseY: pt.y,
+        x: pt.x,
+        isRight,
+        adjustedY: pt.y,
+        originalY: pt.y
+      });
+    });
+
+    function adjustOverlap(labels) {
+      labels.sort((a, b) => a.baseY - b.baseY);
+
+      for (let pass = 0; pass < 3; pass++) {
+        for (let i = 1; i < labels.length; i++) {
+          const prev = labels[i - 1];
+          const curr = labels[i];
+
+          if (curr.adjustedY - prev.adjustedY < minDistance) {
+            const shift = minDistance - (curr.adjustedY - prev.adjustedY);
+            curr.adjustedY = prev.adjustedY + minDistance;
+
+            for (let j = i + 1; j < labels.length; j++) {
+              if (labels[j].adjustedY < curr.adjustedY + minDistance) {
+                labels[j].adjustedY = curr.adjustedY + minDistance;
+              }
+            }
+          }
+        }
+
+        for (let i = labels.length - 2; i >= 0; i--) {
+          const prev = labels[i];
+          const curr = labels[i + 1];
+
+          if (curr.adjustedY - prev.adjustedY < minDistance) {
+            prev.adjustedY = curr.adjustedY - minDistance;
+
+            for (let j = i - 1; j >= 0; j--) {
+              if (labels[j].adjustedY > prev.adjustedY - minDistance) {
+                labels[j].adjustedY = prev.adjustedY - minDistance;
+              }
+            }
+          }
+        }
+      }
+
+      const centerY = 0;
+      labels.forEach(l => {
+        l.adjustedY = l.adjustedY + (centerY - labels.reduce((a, b) => a + b.adjustedY, 0) / labels.length) * 0.3;
+      });
+    }
+
+    adjustOverlap(leftLabels);
+    adjustOverlap(rightLabels);
+
+    const allLabels = [...leftLabels, ...rightLabels];
+
+    allLabels.forEach(label => {
+      const arc = label.arc;
+      const isSelected = selectedProvince === label.index;
+      const isRight = label.isRight;
+
+      ctx.save();
+      ctx.translate(cx, cy);
 
       ctx.font = isSelected ? 'bold 14px Microsoft YaHei' : '13px Microsoft YaHei';
       ctx.fillStyle = isSelected ? '#00ff88' : '#c0d8f0';
       ctx.textAlign = isRight ? 'left' : 'right';
       ctx.textBaseline = 'middle';
 
-      const linePt = arcPoint(angle, outerRadius + 5);
-      ctx.strokeStyle = arc.color;
+      const lineStart = arcPoint(label.angle, outerRadius + 5);
+      const lineEnd = {
+        x: isRight ? label.x + 5 : label.x - 5,
+        y: label.adjustedY
+      };
+
+      const bendPt = arcPoint(label.angle, outerRadius + 12);
+
+      ctx.strokeStyle = arc.color + '80';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(linePt.x, linePt.y);
-      ctx.lineTo(pt.x, pt.y);
+      ctx.moveTo(lineStart.x, lineStart.y);
+      ctx.quadraticCurveTo(bendPt.x, bendPt.y, lineEnd.x, lineEnd.y);
       ctx.stroke();
 
-      const dotPt = arcPoint(angle, outerRadius + 2);
+      const dotPt = arcPoint(label.angle, outerRadius + 2);
       ctx.beginPath();
       ctx.arc(dotPt.x, dotPt.y, 3, 0, 2 * Math.PI);
       ctx.fillStyle = arc.color;
       ctx.fill();
 
-      ctx.fillText(arc.name, pt.x + (isRight ? 5 : -5), pt.y);
+      ctx.fillText(arc.name, lineEnd.x, lineEnd.y);
 
       const valueText = (arc.total / 1000).toFixed(1) + 'k';
       ctx.font = '11px Microsoft YaHei';
       ctx.fillStyle = '#7a9bbf';
-      ctx.fillText(valueText, pt.x + (isRight ? 5 : -5), pt.y + 16);
+      ctx.fillText(valueText, lineEnd.x, lineEnd.y + 16);
 
       ctx.restore();
     });
