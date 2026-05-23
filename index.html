@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三维星系引力模拟器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 15px;
+            border-radius: 6px;
+            pointer-events: none;
+            line-height: 1.6;
+        }
+        #info h3 {
+            margin-bottom: 6px;
+            color: #4fc3f7;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="info">
+        <h3>🌌 三维星系引力模拟器</h3>
+        <div>鼠标左键拖拽：旋转视角</div>
+        <div>鼠标滚轮：缩放</div>
+        <div>物理引擎：万有引力 F = G·m₁·m₂/r²</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="./physics.js"></script>
+    <script type="module" src="./renderer.js"></script>
+</body>
+</html>
