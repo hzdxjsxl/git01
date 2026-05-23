@@ -52,8 +52,14 @@
       <input id="sample" type="number" value="1500" min="100" max="5000" />
     </div>
     <div class="row">
-      <label>距离阈值 (σ 倍数)</label>
-      <input id="kSigma" type="number" value="2.0" min="0.5" max="5" step="0.1" />
+      <label>σ 倍数</label>
+      <input id="kSigma" type="number" value="2.5" min="0.5" max="5" step="0.1" />
+      <label>裁剪比例</label>
+      <input id="trimRatio" type="number" value="0.65" min="0.3" max="1.0" step="0.05" />
+    </div>
+    <div class="row">
+      <label>最大对应距离</label>
+      <input id="maxDist" type="number" value="1.5" min="0.1" max="10" step="0.1" />
     </div>
   </div>
   <div id="legend">

@@ -165,9 +165,11 @@ async function runICP() {
   const maxIter = parseInt(document.getElementById('maxIter').value, 10) || 40;
   const sampleSize = parseInt(document.getElementById('sample').value, 10) || 1500;
   const kSigma = parseFloat(document.getElementById('kSigma').value) || 2.0;
+  const trimRatio = parseFloat(document.getElementById('trimRatio').value);
+  const maxDist = parseFloat(document.getElementById('maxDist').value);
 
   const t0 = performance.now();
-  const result = icp(pointsB, pointsA, { maxIter, sampleSize, kSigma });
+  const result = icp(pointsB, pointsA, { maxIter, sampleSize, kSigma, trimRatio, maxDist });
   const total = performance.now() - t0;
 
   log(`ICP 完成：共 ${result.iterations.length} 次迭代，耗时 ${total.toFixed(1)} ms，最终 RMSE = ${result.finalRmse.toFixed(5)}`, 'ok');
