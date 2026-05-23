@@ -152,12 +152,20 @@ export default function Home() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={handleReset}
-              className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              重置数据
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleSelectQueue(103)}
+                className="px-4 py-2 text-sm font-medium text-white bg-amber-500 rounded-lg hover:bg-amber-600 transition-colors"
+              >
+                模拟A103拼桌
+              </button>
+              <button
+                onClick={handleReset}
+                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                重置数据
+              </button>
+            </div>
           </div>
         </div>
       </header>
