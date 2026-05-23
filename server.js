@@ -7,7 +7,7 @@ const zlib = require('zlib');
 
 const TOTAL = 20000;
 const BRANCH = 6;
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT) || 3000;
 
 function buildFlat() {
   const flat = new Array(TOTAL);
