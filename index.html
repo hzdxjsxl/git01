@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>实时选举看盘</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", sans-serif; background: #0a0e1a; color: #e0e6f0; overflow: hidden; }
+  #header { padding: 12px 20px; background: #111827; border-bottom: 2px solid #1e3a5f; display: flex; justify-content: space-between; align-items: center; }
+  #header h1 { font-size: 20px; letter-spacing: 2px; }
+  #status { font-size: 13px; color: #60a5fa; }
+  #container { display: flex; height: calc(100vh - 54px); }
+  #map-wrap { flex: 1; position: relative; background: #0d1526; }
+  canvas { display: block; }
+  #sidebar { width: 320px; background: #111827; border-left: 2px solid #1e3a5f; overflow-y: auto; padding: 12px; }
+  #sidebar h3 { font-size: 14px; margin-bottom: 8px; color: #93c5fd; border-bottom: 1px solid #1e3a5f; padding-bottom: 6px; }
+  .district-item { padding: 8px 10px; margin-bottom: 6px; border-radius: 4px; border-left: 4px solid #4b5563; background: #0d1526; font-size: 12px; }
+  .district-item .name { font-weight: bold; margin-bottom: 4px; }
+  .district-item .votes { display: flex; justify-content: space-between; font-family: monospace; }
+  .party-a { color: #ef4444; }
+  .party-b { color: #3b82f6; }
+  .total-bar { height: 6px; background: #1e3a5f; border-radius: 3px; overflow: hidden; margin-top: 4px; display: flex; }
+  .total-bar .a { background: #ef4444; }
+  .total-bar .b { background: #3b82f6; }
+  #legend { position: absolute; bottom: 12px; left: 12px; background: rgba(17,24,39,0.9); padding: 10px 14px; border-radius: 6px; font-size: 12px; }
+  #legend .row { display: flex; align-items: center; margin: 4px 0; }
+  #legend .swatch { width: 20px; height: 14px; margin-right: 8px; border: 1px solid #333; border-radius: 2px; }
+  #tooltip { position: absolute; background: rgba(0,0,0,0.9); color: #fff; padding: 8px 12px; border-radius: 4px; font-size: 12px; pointer-events: none; display: none; border: 1px solid #1e3a5f; z-index: 100; }
+</style>
+</head>
+<body>
+<div id="header">
+  <h1>实时选举看盘系统</h1>
+  <span id="status">正在连接...</span>
+</div>
+<div id="container">
+  <div id="map-wrap">
+    <canvas id="map"></canvas>
+    <div id="legend">
+      <div class="row"><div class="swatch" style="background:#ef4444"></div>红党 (A) 领先</div>
+      <div class="row"><div class="swatch" style="background:#3b82f6"></div>蓝党 (B) 领先</div>
+      <div class="row"><div class="swatch" style="background:#6b7280"></div>势均力敌</div>
+    </div>
+    <div id="tooltip"></div>
+  </div>
+  <div id="sidebar">
+    <h3>各选区实时票数</h3>
+    <div id="district-list"></div>
+  </div>
+</div>
+
+<script>
+const CANVAS_W = 900;
+const CANVAS_H = 640;
+
+const canvas = document.getElementById('map');
+const ctx = canvas.getContext('2d');
+canvas.width = CANVAS_W;
+canvas.height = CANVAS_H;
+
+const DISTRICT_BOUNDARIES = {
+  D01: [ {x:80,y:60},{x:260,y:40},{x:340,y:100},{x:310,y:200},{x:200,y:240},{x:90,y:200},{x:60,y:130} ],
+  D02: [ {x:340,y:100},{x:520,y:70},{x:600,y:140},{x:550,y:230},{x:420,y:260},{x:310,y:200} ],
+  D03: [ {x:520,y:70},{x:740,y:50},{x:820,y:130},{x:780,y:230},{x:600,y:220},{x:550,y:230},{x:600,y:140} ],
+  D04: [ {x:60,y:200},{x:200,y:240},{x:310,y:200},{x:420,y:260},{x:400,y:380},{x:280,y:420},{x:120,y:380},{x:40,y:300} ],
+  D05: [ {x:310,y:200},{x:420,y:260},{x:550,y:230},{x:600,y:220},{x:640,y:330},{x:550,y:400},{x:400,y:380} ],
+  D06: [ {x:600,y:220},{x:780,y:230},{x:820,y:360},{x:700,y:420},{x:640,y:330} ],
+  D07: [ {x:40,y:300},{x:120,y:380},{x:280,y:420},{x:400,y:380},{x:380,y:520},{x:200,y:580},{x:60,y:500} ],
+  D08: [ {x:380,y:520},{x:550,y:400},{x:640,y:330},{x:700,y:420},{x:820,y:360},{x:850,y:520},{x:700,y:600},{x:500,y:590},{x:400,y:570} ],
+};
+
+const DISTRICT_CENTERS = {};
+for (const [id, pts] of Object.entries(DISTRICT_BOUNDARIES)) {
+  let cx=0, cy=0;
+  pts.forEach(p => { cx+=p.x; cy+=p.y; });
+  cx/=pts.length; cy/=pts.length;
+  DISTRICT_CENTERS[id] = { x: cx, y: cy };
+}
+
+let districtsMeta = {};
+let totals = {};
+let incrementsQueue = [];
+let lastUpdateTime = 0;
+
+const statusEl = document.getElementById('status');
+const tooltipEl = document.getElementById('tooltip');
+const listEl = document.getElementById('district-list');
+
+function getColor(votesA, votesB) {
+  const total = votesA + votesB;
+  if (total === 0) return '#2d3748';
+  const ratioA = votesA / total;
+  const ratioB = votesB / total;
+  const diff = Math.abs(ratioA - ratioB);
+  const intensity = Math.min(diff / 0.4, 1);
+
+  if (ratioA > ratioB) {
+    const r = Math.floor(239);
+    const g = Math.floor(68 * (1 - intensity * 0.7));
+    const b = Math.floor(68 * (1 - intensity * 0.7));
+    return `rgb(${r},${g},${b})`;
+  } else if (ratioB > ratioA) {
+    const r = Math.floor(59 * (1 - intensity * 0.7));
+    const g = Math.floor(130 * (1 - intensity * 0.5));
+    const b = Math.floor(246);
+    return `rgb(${r},${g},${b})`;
+  } else {
+    return '#6b7280';
+  }
+}
+
+function drawMap() {
+  ctx.fillStyle = '#0d1526';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  for (const [id, pts] of Object.entries(DISTRICT_BOUNDARIES)) {
+    const t = totals[id] || { A: 0, B: 0 };
+    const fillColor = getColor(t.A, t.B);
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.strokeStyle = '#1e3a5f';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  for (const [id, center] of Object.entries(DISTRICT_CENTERS)) {
+    const meta = districtsMeta[id];
+    const t = totals[id] || { A: 0, B: 0 };
+    const name = meta ? meta.name : id;
+    const total = t.A + t.B;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText(name, center.x, center.y - 14);
+
+    ctx.font = '11px monospace';
+    if (total > 0) {
+      const leader = t.A > t.B ? `红党 ${t.A}` : t.B > t.A ? `蓝党 ${t.B}` : `持平`;
+      ctx.fillText(leader, center.x, center.y + 2);
+    } else {
+      ctx.fillText('等待数据...', center.x, center.y + 2);
+    }
+    ctx.fillText(`总计: ${total}`, center.x, center.y + 18);
+  }
+}
+
+function updateSidebar() {
+  let html = '';
+  for (const [id, meta] of Object.entries(districtsMeta)) {
+    const t = totals[id] || { A: 0, B: 0 };
+    const total = t.A + t.B;
+    const ratioA = total > 0 ? (t.A / total * 100) : 50;
+    const ratioB = total > 0 ? (t.B / total * 100) : 50;
+    html += `
+      <div class="district-item" style="border-left-color:${getColor(t.A, t.B)}">
+        <div class="name">${meta.name}</div>
+        <div class="votes">
+          <span class="party-a">红党: ${t.A}</span>
+          <span class="party-b">蓝党: ${t.B}</span>
+        </div>
+        <div class="total-bar">
+          <div class="a" style="width:${ratioA}%"></div>
+          <div class="b" style="width:${ratioB}%"></div>
+        </div>
+      </div>
+    `;
+  }
+  listEl.innerHTML = html;
+}
+
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+  let found = null;
+  for (const [id, pts] of Object.entries(DISTRICT_BOUNDARIES)) {
+    if (pointInPolygon(mx, my, pts)) {
+      found = id;
+      break;
+    }
+  }
+
+  if (found) {
+    const meta = districtsMeta[found];
+    const t = totals[found] || { A: 0, B: 0 };
+    const total = t.A + t.B;
+    tooltipEl.style.display = 'block';
+    tooltipEl.style.left = (e.clientX + 12) + 'px';
+    tooltipEl.style.top = (e.clientY + 12) + 'px';
+    tooltipEl.innerHTML = `
+      <strong>${meta ? meta.name : found}</strong><br>
+      <span style="color:#ef4444">红党: ${t.A}</span> | 
+      <span style="color:#3b82f6">蓝党: ${t.B}</span><br>
+      总计: ${total}
+    `;
+  } else {
+    tooltipEl.style.display = 'none';
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  tooltipEl.style.display = 'none';
+});
+
+function pointInPolygon(px, py, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y;
+    const xj = pts[j].x, yj = pts[j].y;
+    const intersect = ((yi > py) !== (yj > py)) &&
+      (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function processIncoming(msg) {
+  try {
+    const data = JSON.parse(msg.data);
+
+    if (data.type === 'snapshot') {
+      data.districts.forEach(d => { districtsMeta[d.id] = d; });
+      if (data.totals) {
+        for (const [id, v] of Object.entries(data.totals)) {
+          totals[id] = { A: v.A, B: v.B };
+        }
+      }
+      statusEl.textContent = '已连接 · 实时更新中';
+      statusEl.style.color = '#4ade80';
+    } else if (data.type === 'increment') {
+      data.increments.forEach(inc => {
+        if (!totals[inc.districtId]) {
+          totals[inc.districtId] = { A: 0, B: 0 };
+        }
+        totals[inc.districtId].A += inc.A;
+        totals[inc.districtId].B += inc.B;
+      });
+      lastUpdateTime = data.timestamp;
+    }
+
+    drawMap();
+    updateSidebar();
+  } catch (err) {
+    console.error('Parse error:', err);
+  }
+}
+
+function connect() {
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${protocol}://${location.host}`);
+
+  ws.onopen = () => {
+    statusEl.textContent = 'WebSocket 已连接';
+    statusEl.style.color = '#60a5fa';
+  };
+
+  ws.onmessage = processIncoming;
+
+  ws.onclose = () => {
+    statusEl.textContent = '连接断开，正在重连...';
+    statusEl.style.color = '#f59e0b';
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = () => {
+    statusEl.textContent = '连接错误，正在重连...';
+    statusEl.style.color = '#ef4444';
+  };
+}
+
+connect();
+drawMap();
+updateSidebar();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "realtime-election-dashboard",
+  "version": "1.0.0",
+  "description": "Real-time election dashboard with WebSocket streaming and dynamic canvas map",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
