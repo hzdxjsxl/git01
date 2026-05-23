@@ -90,7 +90,7 @@
   const legendEl = document.getElementById('legend');
   const infoBar = document.getElementById('infoBar');
 
-  const MARGIN = { top: 80, right: 90, bottom: 60, left: 90 };
+  const MARGIN = { top: 120, right: 90, bottom: 60, left: 90 };
   const PLOT_W = canvas.width - MARGIN.left - MARGIN.right;
   const PLOT_H = canvas.height - MARGIN.top - MARGIN.bottom;
 
@@ -183,10 +183,10 @@
       ctx.textBaseline = 'bottom';
       ctx.fillStyle = '#ddd';
       ctx.font = 'bold 12px "Segoe UI", sans-serif';
-      ctx.fillText(ind.name, x, MARGIN.top - 12);
-      ctx.fillStyle = '#666';
+      ctx.fillText(ind.name, x, MARGIN.top - 55);
+      ctx.fillStyle = '#7a8090';
       ctx.font = '10px "Segoe UI", sans-serif';
-      ctx.fillText(ind.unit, x, MARGIN.top - 1);
+      ctx.fillText(ind.unit, x, MARGIN.top - 35);
     });
 
     ctx.strokeStyle = '#4a5060';
