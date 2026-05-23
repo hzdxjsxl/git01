@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>环保数据大屏 - 省份碳排放转移和弦图</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(135deg, #0a1628 0%, #1a2a4a 50%, #0d1b2a 100%);
+    color: #e0e8f0;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  .container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+
+  .header {
+    text-align: center;
+    padding: 10px 0;
+    margin-bottom: 10px;
+  }
+
+  .header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    background: linear-gradient(90deg, #00d4ff, #00ff88, #00d4ff);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 3s linear infinite;
+    letter-spacing: 4px;
+  }
+
+  .header .subtitle {
+    font-size: 14px;
+    color: #7a9bbf;
+    margin-top: 8px;
+    letter-spacing: 2px;
+  }
+
+  @keyframes shine {
+    0% { background-position: 0% center; }
+    100% { background-position: 200% center; }
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    width: 100%;
+    max-width: 1600px;
+    gap: 20px;
+  }
+
+  .left-panel, .right-panel {
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .center-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .panel {
+    background: rgba(15, 35, 65, 0.6);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    border-radius: 8px;
+    padding: 15px;
+    backdrop-filter: blur(10px);
+  }
+
+  .panel-title {
+    font-size: 14px;
+    color: #00d4ff;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title::before {
+    content: '';
+    width: 4px;
+    height: 14px;
+    background: linear-gradient(180deg, #00d4ff, #00ff88);
+    border-radius: 2px;
+  }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .stat-row:last-child { border-bottom: none; }
+
+  .stat-label {
+    font-size: 12px;
+    color: #7a9bbf;
+  }
+
+  .stat-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #00ff88;
+  }
+
+  .province-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    cursor: pointer;
+    transition: all 0.3s;
+    border-radius: 4px;
+  }
+
+  .province-item:hover {
+    background: rgba(0, 212, 255, 0.1);
+    padding-left: 8px;
+  }
+
+  .province-item.active {
+    background: rgba(0, 212, 255, 0.2);
+  }
+
+  .province-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    margin-right: 10px;
+  }
+
+  .province-name {
+    flex: 1;
+    font-size: 13px;
+    color: #c0d8f0;
+  }
+
+  .province-value {
+    font-size: 12px;
+    color: #7a9bbf;
+  }
+
+  canvas {
+    display: block;
+  }
+
+  .tooltip {
+    position: fixed;
+    background: rgba(10, 25, 50, 0.95);
+    border: 1px solid rgba(0, 212, 255, 0.5);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.2s;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+
+  .tooltip.show {
+    opacity: 1;
+  }
+
+  .tooltip-title {
+    color: #00d4ff;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    color: #a0b8d0;
+    margin: 3px 0;
+  }
+
+  .tooltip-value {
+    color: #00ff88;
+    font-weight: 500;
+  }
+
+  .footer {
+    text-align: center;
+    padding: 10px;
+    font-size: 12px;
+    color: #5a7a9a;
+    letter-spacing: 1px;
+  }
+
+  .footer span {
+    color: #00d4ff;
+  }
+
+  .bar-item {
+    margin: 8px 0;
+  }
+
+  .bar-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .bar-track {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>中国省份碳排放转移监测大屏</h1>
+    <div class="subtitle">CHINA PROVINCIAL CARBON EMISSION TRANSFER MONITORING</div>
+  </div>
+
+  <div class="main">
+    <div class="left-panel">
+      <div class="panel">
+        <div class="panel-title">碳排放概览</div>
+        <div id="overview-stats"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">省份排放排行</div>
+        <div id="province-ranking"></div>
+      </div>
+    </div>
+
+    <div class="center-panel">
+      <canvas id="chordCanvas"></canvas>
+    </div>
+
+    <div class="right-panel">
+      <div class="panel">
+        <div class="panel-title">流入最多</div>
+        <div id="top-inflow"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">流出最多</div>
+        <div id="top-outflow"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>●</span> 数据来源：模拟碳排放数据库 | 更新时间：<span id="updateTime"></span>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+(function() {
+  const COLORS = [
+    '#00d4ff', '#00ff88', '#ff6b6b', '#ffa502', '#a55eea',
+    '#26de81', '#fc5c65', '#45aaf2', '#fd9644', '#fed330'
+  ];
+
+  const ARC_PAD = 0.02;
+
+  let provinces = [];
+  let matrix = [];
+  let chordData = null;
+  let selectedProvince = null;
+
+  const canvas = document.getElementById('chordCanvas');
+  const ctx = canvas.getContext('2d');
+  const tooltip = document.getElementById('tooltip');
+
+  function resizeCanvas() {
+    const centerPanel = document.querySelector('.center-panel');
+    const size = Math.min(centerPanel.clientWidth - 40, centerPanel.clientHeight - 40, 700);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+    if (chordData) drawChord();
+  }
+
+  function fetchData() {
+    fetch('/api/carbon-matrix')
+      .then(res => res.json())
+      .then(data => {
+        provinces = data.provinces;
+        matrix = data.matrix;
+        chordData = computeChord(provinces, matrix);
+        resizeCanvas();
+        updatePanels();
+      })
+      .catch(err => {
+        console.error('数据加载失败:', err);
+        generateMockData();
+      });
+  }
+
+  function generateMockData() {
+    provinces = ['北京', '上海', '广东', '江苏', '浙江', '山东', '河北', '四川', '湖北', '湖南'];
+    matrix = [
+      [0, 120, 250, 320, 200, 280, 350, 180, 160, 140],
+      [120, 0, 180, 150, 160, 130, 110, 140, 120, 100],
+      [250, 180, 0, 280, 190, 220, 160, 170, 200, 180],
+      [320, 150, 280, 0, 240, 170, 200, 150, 180, 160],
+      [200, 160, 190, 240, 0, 140, 120, 130, 150, 130],
+      [280, 130, 220, 170, 140, 0, 260, 190, 170, 150],
+      [350, 110, 160, 200, 120, 260, 0, 210, 140, 120],
+      [180, 140, 170, 150, 130, 190, 210, 0, 230, 200],
+      [160, 120, 200, 180, 150, 170, 140, 230, 0, 210],
+      [140, 100, 180, 160, 130, 150, 120, 200, 210, 0]
+    ];
+    chordData = computeChord(provinces, matrix);
+    resizeCanvas();
+    updatePanels();
+  }
+
+  function computeChord(provinces, matrix) {
+    const n = provinces.length;
+
+    let totalFlow = 0;
+    const totals = new Array(n).fill(0);
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (i !== j) {
+          totals[i] += matrix[i][j];
+          totals[i] += matrix[j][i];
+          totalFlow += matrix[i][j];
+        }
+      }
+    }
+
+    const padTotal = n * ARC_PAD;
+    const available = 2 * Math.PI - padTotal;
+    const arcs = [];
+    let startAngle = -Math.PI / 2;
+
+    for (let i = 0; i < n; i++) {
+      const angle = (totals[i] / (totalFlow)) * available;
+      arcs.push({
+        index: i,
+        name: provinces[i],
+        color: COLORS[i % COLORS.length],
+        startAngle: startAngle,
+        endAngle: startAngle + angle,
+        midAngle: startAngle + angle / 2,
+        total: totals[i],
+        outflow: matrix[i].reduce((a, b) => a + b, 0),
+        inflow: matrix.reduce((a, b) => a + b[i], 0)
+      });
+      startAngle += angle + ARC_PAD;
+    }
+
+    const ribbons = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (i < j && (matrix[i][j] > 0 || matrix[j][i] > 0)) {
+          ribbons.push({
+            source: i,
+            target: j,
+            sourceValue: matrix[i][j],
+            targetValue: matrix[j][i],
+            total: matrix[i][j] + matrix[j][i]
+          });
+        }
+      }
+    }
+    ribbons.sort((a, b) => b.total - a.total);
+
+    return { arcs, ribbons, n, totalFlow };
+  }
+
+  function arcPoint(angle, radius) {
+    return {
+      x: radius * Math.cos(angle),
+      y: radius * Math.sin(angle)
+    };
+  }
+
+  function cubicBezier(p0, p1, p2, p3, t) {
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const mt = 1 - t;
+    const mt2 = mt * mt;
+    const mt3 = mt2 * mt;
+    return {
+      x: mt3 * p0.x + 3 * mt2 * t * p1.x + 3 * mt * t2 * p2.x + t3 * p3.x,
+      y: mt3 * p0.y + 3 * mt2 * t * p1.y + 3 * mt * t2 * p2.y + t3 * p3.y
+    };
+  }
+
+  function drawChord() {
+    const size = parseFloat(canvas.style.width);
+    const cx = size / 2;
+    const cy = size / 2;
+    const outerRadius = size * 0.38;
+    const innerRadius = outerRadius * 0.78;
+    const labelRadius = outerRadius + 30;
+
+    ctx.clearRect(0, 0, size, size);
+
+    drawRibbons(cx, cy, innerRadius);
+
+    drawArcs(cx, cy, innerRadius, outerRadius);
+
+    drawLabels(cx, cy, labelRadius, outerRadius);
+
+    drawCenterInfo(cx, cy, innerRadius);
+  }
+
+  function drawRibbons(cx, cy, innerRadius) {
+    const { arcs, ribbons } = chordData;
+
+    const arcOffsets = {};
+    arcs.forEach(arc => {
+      arcOffsets[arc.index] = {
+        positive: 0,
+        negative: 0
+      };
+    });
+
+    ribbons.forEach(ribbon => {
+      const sourceArc = arcs[ribbon.source];
+      const targetArc = arcs[ribbon.target];
+
+      const sourceAngleSpan = sourceArc.endAngle - sourceArc.startAngle;
+      const targetAngleSpan = targetArc.endAngle - targetArc.startAngle;
+
+      const sourceRatio = ribbon.sourceValue / sourceArc.total;
+      const targetRatio = ribbon.targetValue / targetArc.total;
+
+      const sourceHalfSpan = sourceAngleSpan * sourceRatio;
+      const targetHalfSpan = targetAngleSpan * targetRatio;
+
+      const srcStart = sourceArc.startAngle + arcOffsets[ribbon.source].positive;
+      const srcEnd = srcStart + sourceHalfSpan;
+      arcOffsets[ribbon.source].positive += sourceHalfSpan;
+
+      const tgtStart = targetArc.startAngle + arcOffsets[ribbon.target].negative;
+      const tgtEnd = tgtStart + targetHalfSpan;
+      arcOffsets[ribbon.target].negative += targetHalfSpan;
+
+      const srcStartPt = arcPoint(srcStart, innerRadius);
+      const srcEndPt = arcPoint(srcEnd, innerRadius);
+      const tgtStartPt = arcPoint(tgtStart, innerRadius);
+      const tgtEndPt = arcPoint(tgtEnd, innerRadius);
+
+      const cp1 = {
+        x: srcStartPt.x * 0.4,
+        y: srcStartPt.y * 0.4
+      };
+      const cp2 = {
+        x: tgtStartPt.x * 0.4,
+        y: tgtStartPt.y * 0.4
+      };
+      const cp3 = {
+        x: tgtEndPt.x * 0.4,
+        y: tgtEndPt.y * 0.4
+      };
+      const cp4 = {
+        x: srcEndPt.x * 0.4,
+        y: srcEndPt.y * 0.4
+      };
+
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      const isHighlighted = selectedProvince !== null &&
+        (ribbon.source === selectedProvince || ribbon.target === selectedProvince);
+      const isDimmed = selectedProvince !== null && !isHighlighted;
+
+      ctx.globalAlpha = isDimmed ? 0.08 : 0.6;
+
+      const grad = ctx.createLinearGradient(
+        srcStartPt.x, srcStartPt.y,
+        tgtStartPt.x, tgtStartPt.y
+      );
+      grad.addColorStop(0, sourceArc.color);
+      grad.addColorStop(1, targetArc.color);
+
+      ctx.beginPath();
+      ctx.moveTo(srcStartPt.x, srcStartPt.y);
+
+      ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, tgtStartPt.x, tgtStartPt.y);
+      ctx.arc(0, 0, innerRadius, tgtStart, tgtEnd, false);
+      ctx.bezierCurveTo(cp3.x, cp3.y, cp4.x, cp4.y, srcEndPt.x, srcEndPt.y);
+      ctx.arc(0, 0, innerRadius, srcEnd, srcStart, true);
+      ctx.closePath();
+
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    });
+  }
+
+  function drawArcs(cx, cy, innerRadius, outerRadius) {
+    const { arcs } = chordData;
+
+    arcs.forEach((arc, i) => {
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      const isSelected = selectedProvince === i;
+      const or = isSelected ? outerRadius + 8 : outerRadius;
+
+      const grad = ctx.createRadialGradient(0, 0, innerRadius, 0, 0, or);
+      grad.addColorStop(0, arc.color + '80');
+      grad.addColorStop(1, arc.color);
+
+      ctx.beginPath();
+      ctx.arc(0, 0, or, arc.startAngle, arc.endAngle, false);
+      ctx.arc(0, 0, innerRadius, arc.endAngle, arc.startAngle, true);
+      ctx.closePath();
+
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.strokeStyle = arc.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.restore();
+    });
+  }
+
+  function drawLabels(cx, cy, labelRadius, outerRadius) {
+    const { arcs } = chordData;
+
+    arcs.forEach((arc, i) => {
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      const angle = arc.midAngle;
+      const isRight = Math.cos(angle) > 0;
+
+      const pt = arcPoint(angle, labelRadius);
+
+      const isSelected = selectedProvince === i;
+
+      ctx.font = isSelected ? 'bold 14px Microsoft YaHei' : '13px Microsoft YaHei';
+      ctx.fillStyle = isSelected ? '#00ff88' : '#c0d8f0';
+      ctx.textAlign = isRight ? 'left' : 'right';
+      ctx.textBaseline = 'middle';
+
+      const linePt = arcPoint(angle, outerRadius + 5);
+      ctx.strokeStyle = arc.color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(linePt.x, linePt.y);
+      ctx.lineTo(pt.x, pt.y);
+      ctx.stroke();
+
+      const dotPt = arcPoint(angle, outerRadius + 2);
+      ctx.beginPath();
+      ctx.arc(dotPt.x, dotPt.y, 3, 0, 2 * Math.PI);
+      ctx.fillStyle = arc.color;
+      ctx.fill();
+
+      ctx.fillText(arc.name, pt.x + (isRight ? 5 : -5), pt.y);
+
+      const valueText = (arc.total / 1000).toFixed(1) + 'k';
+      ctx.font = '11px Microsoft YaHei';
+      ctx.fillStyle = '#7a9bbf';
+      ctx.fillText(valueText, pt.x + (isRight ? 5 : -5), pt.y + 16);
+
+      ctx.restore();
+    });
+  }
+
+  function drawCenterInfo(cx, cy, innerRadius) {
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    const totalFlow = chordData.totalFlow;
+
+    ctx.font = 'bold 28px Microsoft YaHei';
+    ctx.fillStyle = '#00d4ff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText((totalFlow / 1000).toFixed(1) + 'k', 0, -15);
+
+    ctx.font = '12px Microsoft YaHei';
+    ctx.fillStyle = '#7a9bbf';
+    ctx.fillText('总碳排放量(万吨)', 0, 15);
+
+    ctx.restore();
+  }
+
+  function updatePanels() {
+    const { arcs, totalFlow } = chordData;
+
+    const totalOutflow = arcs.reduce((a, b) => a + b.outflow, 0);
+    const totalInflow = arcs.reduce((a, b) => a + b.inflow, 0);
+
+    document.getElementById('overview-stats').innerHTML = `
+      <div class="stat-row">
+        <span class="stat-label">省份数量</span>
+        <span class="stat-value">${arcs.length} 个</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">总排放量</span>
+        <span class="stat-value">${(totalFlow / 1000).toFixed(1)} 万吨</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">总流出</span>
+        <span class="stat-value">${(totalOutflow / 1000).toFixed(1)} 万吨</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">总流入</span>
+        <span class="stat-value">${(totalInflow / 1000).toFixed(1)} 万吨</span>
+      </div>
+    `;
+
+    const sorted = [...arcs].sort((a, b) => b.total - a.total);
+    const maxTotal = sorted[0].total;
+
+    document.getElementById('province-ranking').innerHTML = sorted.map((arc, i) => `
+      <div class="province-item ${selectedProvince === arc.index ? 'active' : ''}" data-index="${arc.index}">
+        <div style="display:flex;align-items:center;">
+          <div class="province-color" style="background:${arc.color}"></div>
+          <span class="province-name">${i + 1}. ${arc.name}</span>
+        </div>
+        <span class="province-value">${(arc.total / 1000).toFixed(1)}k</span>
+      </div>
+    `).join('');
+
+    const inflowSorted = [...arcs].sort((a, b) => b.inflow - a.inflow).slice(0, 5);
+    const maxInflow = inflowSorted[0].inflow;
+
+    document.getElementById('top-inflow').innerHTML = inflowSorted.map(arc => `
+      <div class="bar-item">
+        <div class="bar-header">
+          <span style="color:${arc.color}">● ${arc.name}</span>
+          <span style="color:#00ff88">${(arc.inflow / 1000).toFixed(1)}k</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${(arc.inflow / maxInflow * 100)}%; background:${arc.color}"></div>
+        </div>
+      </div>
+    `).join('');
+
+    const outflowSorted = [...arcs].sort((a, b) => b.outflow - a.outflow).slice(0, 5);
+    const maxOutflow = outflowSorted[0].outflow;
+
+    document.getElementById('top-outflow').innerHTML = outflowSorted.map(arc => `
+      <div class="bar-item">
+        <div class="bar-header">
+          <span style="color:${arc.color}">● ${arc.name}</span>
+          <span style="color:#00ff88">${(arc.outflow / 1000).toFixed(1)}k</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${(arc.outflow / maxOutflow * 100)}%; background:${arc.color}"></div>
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('updateTime').textContent = new Date().toLocaleString('zh-CN');
+
+    document.querySelectorAll('.province-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const idx = parseInt(item.dataset.index);
+        if (selectedProvince === idx) {
+          selectedProvince = null;
+        } else {
+          selectedProvince = idx;
+        }
+        drawChord();
+        updatePanels();
+      });
+    });
+  }
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (!chordData) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const size = parseFloat(canvas.style.width);
+    const cx = size / 2;
+    const cy = size / 2;
+    const outerRadius = size * 0.38;
+
+    const mx = e.clientX - rect.left - cx;
+    const my = e.clientY - rect.top - cy;
+
+    const dist = Math.sqrt(mx * mx + my * my);
+    const angle = Math.atan2(my, mx);
+
+    let hoveredArc = null;
+
+    if (dist <= outerRadius + 20) {
+      chordData.arcs.forEach((arc, i) => {
+        let sa = arc.startAngle;
+        let ea = arc.endAngle;
+        let normalizedAngle = angle;
+        while (normalizedAngle < sa) normalizedAngle += 2 * Math.PI;
+        if (normalizedAngle <= ea + 0.1) {
+          hoveredArc = arc;
+        }
+      });
+    }
+
+    if (hoveredArc) {
+      canvas.style.cursor = 'pointer';
+      tooltip.classList.add('show');
+      tooltip.style.left = (e.clientX + 15) + 'px';
+      tooltip.style.top = (e.clientY - 10) + 'px';
+      tooltip.innerHTML = `
+        <div class="tooltip-title" style="color:${hoveredArc.color}">${hoveredArc.name}</div>
+        <div class="tooltip-row"><span>总排放量</span><span class="tooltip-value">${(hoveredArc.total / 1000).toFixed(2)} 万吨</span></div>
+        <div class="tooltip-row"><span>流出量</span><span class="tooltip-value">${(hoveredArc.outflow / 1000).toFixed(2)} 万吨</span></div>
+        <div class="tooltip-row"><span>流入量</span><span class="tooltip-value">${(hoveredArc.inflow / 1000).toFixed(2)} 万吨</span></div>
+      `;
+    } else {
+      canvas.style.cursor = 'default';
+      tooltip.classList.remove('show');
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    tooltip.classList.remove('show');
+  });
+
+  canvas.addEventListener('click', (e) => {
+    if (!chordData) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const size = parseFloat(canvas.style.width);
+    const cx = size / 2;
+    const cy = size / 2;
+    const outerRadius = size * 0.38;
+
+    const mx = e.clientX - rect.left - cx;
+    const my = e.clientY - rect.top - cy;
+
+    const dist = Math.sqrt(mx * mx + my * my);
+    const angle = Math.atan2(my, mx);
+
+    if (dist <= outerRadius + 20) {
+      chordData.arcs.forEach((arc, i) => {
+        let sa = arc.startAngle;
+        let ea = arc.endAngle;
+        let normalizedAngle = angle;
+        while (normalizedAngle < sa) normalizedAngle += 2 * Math.PI;
+        if (normalizedAngle <= ea + 0.1) {
+          if (selectedProvince === i) {
+            selectedProvince = null;
+          } else {
+            selectedProvince = i;
+          }
+          drawChord();
+          updatePanels();
+        }
+      });
+    }
+  });
+
+  window.addEventListener('resize', resizeCanvas);
+
+  fetchData();
+
+  setInterval(fetchData, 30000);
+})();
+</script>
+
+</body>
+</html>
