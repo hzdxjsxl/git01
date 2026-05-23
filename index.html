@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>超大型公司组织架构 · 全栈大屏</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="hud">
+    <div class="hud-left">
+      <div class="title">🏢 组织架构大屏</div>
+      <div class="sub">Tidier 树 · Canvas 2D · 手势 + 无限缩放 · 视口剔除</div>
+    </div>
+    <div class="hud-right">
+      <div id="stats">
+        <div><span class="k">节点总数</span><span class="v" id="s-total">0</span></div>
+        <div><span class="k">树深</span><span class="v" id="s-depth">0</span></div>
+        <div><span class="k">渲染节点</span><span class="v" id="s-draw">0</span></div>
+        <div><span class="k">渲染连线</span><span class="v" id="s-edge">0</span></div>
+        <div><span class="k">FPS</span><span class="v" id="s-fps">0</span></div>
+        <div><span class="k">缩放</span><span class="v" id="s-scale">1.00</span></div>
+      </div>
+      <div class="tips">
+        滚轮缩放 · 按住拖拽 · 双击复位 · 触屏双指捏合
+      </div>
+    </div>
+  </div>
+  <div id="overlay">
+    <div id="spinner"></div>
+    <div id="loading">正在构建组织树…</div>
+  </div>
+  <canvas id="canvas"></canvas>
+  <script src="client.js"></script>
+</body>
+</html>
