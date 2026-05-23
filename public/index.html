@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>经济数据平行坐标可视化</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #0f1419;
+    color: #e6e6e6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 {
+    font-size: 22px;
+    margin-bottom: 6px;
+    color: #f0f0f0;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 16px;
+  }
+  #chartCanvas {
+    background: #1a1f2e;
+    border: 1px solid #2a3040;
+    border-radius: 4px;
+    cursor: crosshair;
+  }
+  .legend-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 12px;
+    max-width: 1160px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid #2a3040;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .legend-item:hover {
+    background: #2a3040;
+  }
+  .legend-item.dimmed {
+    opacity: 0.3;
+  }
+  .legend-swatch {
+    width: 18px;
+    height: 3px;
+    border-radius: 2px;
+  }
+  .info-bar {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #aaa;
+    min-height: 18px;
+  }
+  #loading {
+    color: #4a9eff;
+    font-size: 14px;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+  <h1>中国经济指标平行坐标图</h1>
+  <div class="subtitle">2015 — 2024 年 · GDP / 通胀率 / 就业率 / 财政收入 / 进出口 · 原始数据归一化映射</div>
+
+  <div id="loading">正在从服务端加载数据…</div>
+  <canvas id="chartCanvas" width="1160" height="640" style="display:none;"></canvas>
+  <div class="legend-container" id="legend"></div>
+  <div class="info-bar" id="infoBar"></div>
+
+<script>
+(function () {
+  const canvas = document.getElementById('chartCanvas');
+  const ctx = canvas.getContext('2d');
+  const loading = document.getElementById('loading');
+  const legendEl = document.getElementById('legend');
+  const infoBar = document.getElementById('infoBar');
+
+  const MARGIN = { top: 80, right: 90, bottom: 60, left: 90 };
+  const PLOT_W = canvas.width - MARGIN.left - MARGIN.right;
+  const PLOT_H = canvas.height - MARGIN.top - MARGIN.bottom;
+
+  const YEAR_COLORS = [
+    '#e57373', '#ffb74d', '#fff176', '#aed581', '#4fc3f7',
+    '#7986cb', '#ba68c8', '#f06292', '#4db6ac', '#ff8a65'
+  ];
+
+  let data = null;
+  let axisScales = null;
+  let activeYear = -1;
+
+  fetch('/api/economic-data')
+    .then(r => r.json())
+    .then(d => {
+      data = d;
+      axisScales = computeScales(data);
+      loading.style.display = 'none';
+      canvas.style.display = 'block';
+      buildLegend();
+      draw();
+    })
+    .catch(err => {
+      loading.textContent = '数据加载失败：' + err.message;
+    });
+
+  function computeScales(d) {
+    return d.indicators.map(ind => {
+      const min = Math.min(...ind.values);
+      const max = Math.max(...ind.values);
+      const pad = (max - min) * 0.1 || 1;
+      return {
+        min: min - pad,
+        max: max + pad,
+        actualMin: min,
+        actualMax: max
+      };
+    });
+  }
+
+  function normalize(value, scale) {
+    return (value - scale.min) / (scale.max - scale.min);
+  }
+
+  function axisX(index) {
+    const n = data.indicators.length;
+    return MARGIN.left + (PLOT_W / (n - 1)) * index;
+  }
+
+  function valueY(value, scale) {
+    const t = normalize(value, scale);
+    return MARGIN.top + PLOT_H * (1 - t);
+  }
+
+  function drawAxes() {
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#4a5060';
+    ctx.fillStyle = '#bbb';
+    ctx.font = '11px "Segoe UI", sans-serif';
+
+    data.indicators.forEach((ind, i) => {
+      const x = axisX(i);
+      const scale = axisScales[i];
+
+      ctx.beginPath();
+      ctx.moveTo(x, MARGIN.top);
+      ctx.lineTo(x, MARGIN.top + PLOT_H);
+      ctx.stroke();
+
+      const ticks = 5;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let t = 0; t <= ticks; t++) {
+        const ratio = t / ticks;
+        const y = MARGIN.top + PLOT_H * ratio;
+        const v = scale.max - (scale.max - scale.min) * ratio;
+
+        ctx.strokeStyle = '#333842';
+        ctx.beginPath();
+        ctx.moveTo(x - 4, y);
+        ctx.lineTo(x + 4, y);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#4a5060';
+        ctx.fillStyle = '#7a8090';
+        ctx.fillText(v.toFixed(1), x - 8, y);
+      }
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = '#ddd';
+      ctx.font = 'bold 12px "Segoe UI", sans-serif';
+      ctx.fillText(ind.name, x, MARGIN.top - 12);
+      ctx.fillStyle = '#666';
+      ctx.font = '10px "Segoe UI", sans-serif';
+      ctx.fillText(ind.unit, x, MARGIN.top - 1);
+    });
+
+    ctx.strokeStyle = '#4a5060';
+  }
+
+  function drawYearLine(yearIndex, highlighted) {
+    const color = YEAR_COLORS[yearIndex];
+    ctx.strokeStyle = highlighted ? color : color + '88';
+    ctx.lineWidth = highlighted ? 2.5 : 1.4;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    ctx.beginPath();
+    data.indicators.forEach((ind, i) => {
+      const x = axisX(i);
+      const y = valueY(ind.values[yearIndex], axisScales[i]);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    if (highlighted) {
+      data.indicators.forEach((ind, i) => {
+        const x = axisX(i);
+        const y = valueY(ind.values[yearIndex], axisScales[i]);
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, '#1a1f2e');
+    grad.addColorStop(1, '#141826');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = '#1f2530';
+    ctx.lineWidth = 1;
+    for (let gx = 0; gx <= 10; gx++) {
+      const x = MARGIN.left + (PLOT_W / 10) * gx;
+      ctx.beginPath();
+      ctx.moveTo(x, MARGIN.top);
+      ctx.lineTo(x, MARGIN.top + PLOT_H);
+      ctx.stroke();
+    }
+
+    drawAxes();
+
+    for (let i = 0; i < data.years.length; i++) {
+      const highlighted = activeYear === i;
+      const dimmed = activeYear !== -1 && !highlighted;
+      ctx.globalAlpha = dimmed ? 0.12 : 1.0;
+      drawYearLine(i, highlighted);
+    }
+    ctx.globalAlpha = 1.0;
+
+    ctx.fillStyle = '#555';
+    ctx.font = '10px "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('（每轴独立归一化，便于跨量纲对比趋势）', MARGIN.left, MARGIN.top + PLOT_H + 20);
+
+    ctx.textAlign = 'right';
+    ctx.fillText('数据来源：模拟数据 · Canvas 原生绘制', canvas.width - MARGIN.right, MARGIN.top + PLOT_H + 20);
+  }
+
+  function buildLegend() {
+    legendEl.innerHTML = '';
+    data.years.forEach((year, i) => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `<div class="legend-swatch" style="background:${YEAR_COLORS[i]}"></div><span>${year}</span>`;
+      item.addEventListener('mouseenter', () => {
+        activeYear = i;
+        legendEl.querySelectorAll('.legend-item').forEach((el, j) => {
+          if (j !== i) el.classList.add('dimmed');
+        });
+        updateInfo(i);
+        draw();
+      });
+      item.addEventListener('mouseleave', () => {
+        activeYear = -1;
+        legendEl.querySelectorAll('.legend-item').forEach(el => el.classList.remove('dimmed'));
+        infoBar.textContent = '';
+        draw();
+      });
+      legendEl.appendChild(item);
+    });
+  }
+
+  function updateInfo(yearIndex) {
+    const parts = data.indicators.map(ind => {
+      return `${ind.name}=${ind.values[yearIndex]}`;
+    });
+    infoBar.textContent = `${data.years[yearIndex]} 年：${parts.join('  |  ')}`;
+  }
+
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    if (mx < MARGIN.left || mx > canvas.width - MARGIN.right ||
+        my < MARGIN.top || my > canvas.height - MARGIN.bottom) {
+      if (activeYear !== -1 && !e.buttons) {
+        activeYear = -1;
+        legendEl.querySelectorAll('.legend-item').forEach(el => el.classList.remove('dimmed'));
+        infoBar.textContent = '';
+        draw();
+      }
+      return;
+    }
+
+    let bestIdx = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < data.years.length; i++) {
+      let dist = 0;
+      for (let j = 0; j < data.indicators.length; j++) {
+        const x = axisX(j);
+        const y = valueY(data.indicators[j].values[i], axisScales[j]);
+        const dx = mx - x;
+        const dy = my - y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (j === 0 || d < dist) dist = d;
+      }
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+
+    const threshold = 40;
+    const newActive = bestDist < threshold ? bestIdx : -1;
+    if (newActive !== activeYear) {
+      activeYear = newActive;
+      legendEl.querySelectorAll('.legend-item').forEach((el, j) => {
+        if (activeYear === -1) el.classList.remove('dimmed');
+        else if (j !== activeYear) el.classList.add('dimmed');
+        else el.classList.remove('dimmed');
+      });
+      if (activeYear !== -1) updateInfo(activeYear);
+      else infoBar.textContent = '';
+      draw();
+    }
+  });
+})();
+</script>
+</body>
+</html>
