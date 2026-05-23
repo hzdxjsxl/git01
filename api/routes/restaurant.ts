@@ -7,6 +7,8 @@ interface Table {
   capacity: number
   occupied: boolean
   mergedWith: number[]
+  row: number
+  col: number
 }
 
 interface QueueItem {
@@ -23,18 +25,18 @@ interface RestaurantStatus {
 }
 
 const initialTables: Table[] = [
-  { id: 1, capacity: 2, occupied: false, mergedWith: [] },
-  { id: 2, capacity: 2, occupied: false, mergedWith: [] },
-  { id: 3, capacity: 2, occupied: true, mergedWith: [] },
-  { id: 4, capacity: 2, occupied: false, mergedWith: [] },
-  { id: 5, capacity: 2, occupied: false, mergedWith: [] },
-  { id: 6, capacity: 3, occupied: false, mergedWith: [] },
-  { id: 7, capacity: 3, occupied: true, mergedWith: [] },
-  { id: 8, capacity: 3, occupied: false, mergedWith: [] },
-  { id: 9, capacity: 3, occupied: false, mergedWith: [] },
-  { id: 10, capacity: 4, occupied: false, mergedWith: [] },
-  { id: 11, capacity: 4, occupied: true, mergedWith: [] },
-  { id: 12, capacity: 4, occupied: false, mergedWith: [] },
+  { id: 1, capacity: 2, occupied: false, mergedWith: [], row: 0, col: 0 },
+  { id: 2, capacity: 2, occupied: false, mergedWith: [], row: 0, col: 1 },
+  { id: 3, capacity: 2, occupied: true, mergedWith: [], row: 0, col: 2 },
+  { id: 4, capacity: 2, occupied: false, mergedWith: [], row: 0, col: 3 },
+  { id: 5, capacity: 2, occupied: false, mergedWith: [], row: 1, col: 0 },
+  { id: 6, capacity: 3, occupied: false, mergedWith: [], row: 1, col: 1 },
+  { id: 7, capacity: 3, occupied: true, mergedWith: [], row: 1, col: 2 },
+  { id: 8, capacity: 3, occupied: false, mergedWith: [], row: 1, col: 3 },
+  { id: 9, capacity: 3, occupied: false, mergedWith: [], row: 2, col: 0 },
+  { id: 10, capacity: 4, occupied: false, mergedWith: [], row: 2, col: 1 },
+  { id: 11, capacity: 4, occupied: true, mergedWith: [], row: 2, col: 2 },
+  { id: 12, capacity: 4, occupied: false, mergedWith: [], row: 2, col: 3 },
 ]
 
 let currentTables = [...initialTables]

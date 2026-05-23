@@ -13,6 +13,10 @@ interface TableGroup {
   totalCapacity: number
   isOccupied: boolean
   isMerged: boolean
+  row: number
+  col: number
+  rowSpan: number
+  colSpan: number
 }
 
 export default function TableGrid({
@@ -20,7 +24,10 @@ export default function TableGrid({
   highlightedTables,
   onTableClick,
 }: TableGridProps) {
-  const tableGroups = useMemo(() => {
+  const { gridRows, gridCols, tableGroups } = useMemo(() => {
+    const maxRow = Math.max(...tables.map((t) => t.row)) + 1
+    const maxCol = Math.max(...tables.map((t) => t.col)) + 1
+
     const groups: TableGroup[] = []
     const processed = new Set<number>()
 
@@ -29,12 +36,14 @@ export default function TableGrid({
 
       if (table.mergedWith.length > 0) {
         const groupMembers = [table.id, ...table.mergedWith]
-        const totalCapacity = tables
-          .filter((t) => groupMembers.includes(t.id))
-          .reduce((sum, t) => sum + t.capacity, 0)
-        const isOccupied = tables
-          .filter((t) => groupMembers.includes(t.id))
-          .every((t) => t.occupied)
+        const memberTables = tables.filter((t) => groupMembers.includes(t.id))
+        const totalCapacity = memberTables.reduce((sum, t) => sum + t.capacity, 0)
+        const isOccupied = memberTables.every((t) => t.occupied)
+
+        const minRow = Math.min(...memberTables.map((t) => t.row))
+        const maxRowOfGroup = Math.max(...memberTables.map((t) => t.row))
+        const minCol = Math.min(...memberTables.map((t) => t.col))
+        const maxColOfGroup = Math.max(...memberTables.map((t) => t.col))
 
         groups.push({
           id: table.id,
@@ -42,6 +51,10 @@ export default function TableGrid({
           totalCapacity,
           isOccupied,
           isMerged: true,
+          row: minRow,
+          col: minCol,
+          rowSpan: maxRowOfGroup - minRow + 1,
+          colSpan: maxColOfGroup - minCol + 1,
         })
         groupMembers.forEach((id) => processed.add(id))
       } else {
@@ -51,12 +64,16 @@ export default function TableGrid({
           totalCapacity: table.capacity,
           isOccupied: table.occupied,
           isMerged: false,
+          row: table.row,
+          col: table.col,
+          rowSpan: 1,
+          colSpan: 1,
         })
         processed.add(table.id)
       }
     }
 
-    return groups
+    return { gridRows: maxRow, gridCols: maxCol, tableGroups: groups }
   }, [tables])
 
   const getTableColor = (group: TableGroup) => {
@@ -85,12 +102,17 @@ export default function TableGrid({
     return 'text-green-700'
   }
 
+  const gridStyle = {
+    gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
+    gridTemplateRows: `repeat(${gridRows}, 1fr)`,
+  }
+
   return (
     <div className="p-6 bg-white rounded-2xl shadow-lg">
       <h2 className="mb-4 text-xl font-bold text-gray-800">
-        桌台状态
+        桌台状态 (物理布局)
       </h2>
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid gap-4" style={gridStyle}>
         {tableGroups.map((group) => (
           <div
             key={group.id}
@@ -101,6 +123,10 @@ export default function TableGrid({
               hover:scale-105 hover:shadow-md
               ${getTableColor(group)}
             `}
+            style={{
+              gridRow: `${group.row + 1} / span ${group.rowSpan}`,
+              gridColumn: `${group.col + 1} / span ${group.colSpan}`,
+            }}
           >
             {group.isMerged && (
               <div className="absolute -top-2 -right-2 px-2 py-0.5 text-xs font-bold text-white bg-blue-500 rounded-full">
@@ -158,6 +184,10 @@ export default function TableGrid({
                 })}
               </div>
             )}
+
+            <div className="absolute bottom-1 right-1 text-xs text-gray-400">
+              ({group.row + 1},{group.col + 1})
+            </div>
           </div>
         ))}
       </div>

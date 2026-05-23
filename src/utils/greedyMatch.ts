@@ -3,6 +3,8 @@ export interface Table {
   capacity: number
   occupied: boolean
   mergedWith: number[]
+  row: number
+  col: number
 }
 
 export interface QueueItem {
@@ -24,6 +26,42 @@ export interface AlgorithmOutput {
   assignments: AssignmentResult[]
   unassigned: QueueItem[]
   updatedTables: Table[]
+}
+
+function areAdjacent(table1: Table, table2: Table): boolean {
+  const rowDiff = Math.abs(table1.row - table2.row)
+  const colDiff = Math.abs(table1.col - table2.col)
+  return (rowDiff === 1 && colDiff === 0) || (rowDiff === 0 && colDiff === 1)
+}
+
+function isContiguousGroup(tables: Table[]): boolean {
+  if (tables.length <= 1) return true
+
+  const visited = new Set<number>()
+  const queue: Table[] = [tables[0]]
+  visited.add(tables[0].id)
+
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const table of tables) {
+      if (!visited.has(table.id) && areAdjacent(current, table)) {
+        visited.add(table.id)
+        queue.push(table)
+      }
+    }
+  }
+
+  return visited.size === tables.length
+}
+
+function findAdjacentTables(
+  table: Table,
+  allTables: Table[],
+  excludeIds: Set<number>
+): Table[] {
+  return allTables.filter(
+    (t) => !excludeIds.has(t.id) && areAdjacent(table, t)
+  )
 }
 
 export function greedyMatchAlgorithm(
@@ -120,7 +158,7 @@ function findMergedTableAssignment(
 ): AssignmentResult | null {
   const availableTables = emptyTables.filter((t) => !usedTableIds.has(t.id))
 
-  const combinations = findTableCombinations(availableTables, peopleCount)
+  const combinations = findAdjacentTableCombinations(availableTables, peopleCount)
 
   if (combinations.length === 0) {
     return null
@@ -148,13 +186,17 @@ function findMergedTableAssignment(
   }
 }
 
-function findTableCombinations(
+function findAdjacentTableCombinations(
   tables: Table[],
   targetCapacity: number
 ): Table[][] {
   const results: Table[][] = []
 
-  function backtrack(start: number, current: Table[], currentCapacity: number) {
+  function backtrack(
+    current: Table[],
+    currentCapacity: number,
+    visitedIds: Set<number>
+  ) {
     if (currentCapacity >= targetCapacity) {
       results.push([...current])
       return
@@ -164,16 +206,25 @@ function findTableCombinations(
       return
     }
 
-    for (let i = start; i < tables.length; i++) {
-      const table = tables[i]
-      current.push(table)
-      backtrack(i + 1, current, currentCapacity + table.capacity)
+    const lastTable = current[current.length - 1]
+    const adjacentTables = findAdjacentTables(lastTable, tables, visitedIds)
+
+    for (const adjacentTable of adjacentTables) {
+      const newVisited = new Set(visitedIds)
+      newVisited.add(adjacentTable.id)
+      current.push(adjacentTable)
+      backtrack(current, currentCapacity + adjacentTable.capacity, newVisited)
       current.pop()
     }
   }
 
-  backtrack(0, [], 0)
-  return results
+  for (const startTable of tables) {
+    const visited = new Set<number>()
+    visited.add(startTable.id)
+    backtrack([startTable], startTable.capacity, visited)
+  }
+
+  return results.filter((combo) => isContiguousGroup(combo))
 }
 
 export function calculateOptimalMerge(
@@ -187,7 +238,7 @@ export function calculateOptimalMerge(
     return [singleTable]
   }
 
-  const combinations = findTableCombinations(emptyTables, peopleCount)
+  const combinations = findAdjacentTableCombinations(emptyTables, peopleCount)
   if (combinations.length === 0) {
     return null
   }
@@ -223,4 +274,17 @@ export function getTableGroups(tables: Table[]): Map<number, number[]> {
   }
 
   return groups
+}
+
+export function getAdjacencyInfo(tables: Table[]): Map<number, number[]> {
+  const adjacency = new Map<number, number[]>()
+
+  for (const table of tables) {
+    const neighbors = tables
+      .filter((t) => t.id !== table.id && areAdjacent(table, t))
+      .map((t) => t.id)
+    adjacency.set(table.id, neighbors)
+  }
+
+  return adjacency
 }
