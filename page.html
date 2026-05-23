@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>考古瓷器三维拼接 · ICP 自动对齐</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #0b0d12; color: #d8dce5;
+      font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; overflow: hidden; }
+    #app { position: fixed; inset: 0; }
+    #panel { position: absolute; top: 14px; left: 14px; z-index: 10;
+      background: rgba(18,22,30,0.78); border: 1px solid #2a3040; border-radius: 10px;
+      padding: 14px 16px; min-width: 280px; backdrop-filter: blur(6px); }
+    #panel h1 { margin: 0 0 6px 0; font-size: 15px; color: #e9eef7; letter-spacing: 1px; }
+    #panel .sub { font-size: 12px; color: #8a94a8; margin-bottom: 10px; }
+    #panel button { background: #2563eb; color: #fff; border: none; padding: 7px 14px;
+      border-radius: 6px; cursor: pointer; font-size: 13px; margin-right: 6px; }
+    #panel button:disabled { background: #3a4151; cursor: not-allowed; color: #9aa3b2; }
+    #panel .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }
+    #panel .row input[type=number] { width: 70px; background: #111620; color: #d8dce5;
+      border: 1px solid #2a3040; border-radius: 4px; padding: 3px 6px; }
+    #log { position: absolute; bottom: 14px; left: 14px; z-index: 10;
+      background: rgba(18,22,30,0.78); border: 1px solid #2a3040; border-radius: 10px;
+      padding: 10px 14px; min-width: 420px; max-width: 640px; max-height: 34vh; overflow: auto;
+      font-family: "Consolas", "Monaco", monospace; font-size: 12px; line-height: 1.55; }
+    #log .t { color: #8a94a8; }
+    #log .ok { color: #4ade80; }
+    #log .warn { color: #fbbf24; }
+    #log .info { color: #60a5fa; }
+    #legend { position: absolute; top: 14px; right: 14px; z-index: 10;
+      background: rgba(18,22,30,0.78); border: 1px solid #2a3040; border-radius: 10px;
+      padding: 10px 14px; font-size: 12px; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    #loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #0b0d12; z-index: 20; font-size: 14px; color: #a8b0c0; }
+    #loading.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="loading">正在请求服务端点云数据…</div>
+  <div id="panel">
+    <h1>🏺 考古瓷器 · 碎片自动拼接</h1>
+    <div class="sub">前端手算 ICP（迭代最近点）· SVD 求刚体变换</div>
+    <div>
+      <button id="btnStart">开始拼接</button>
+      <button id="btnReset">重置</button>
+    </div>
+    <div class="row">
+      <label>ICP 迭代上限</label>
+      <input id="maxIter" type="number" value="40" min="1" max="200" />
+      <label>每步采样</label>
+      <input id="sample" type="number" value="1500" min="100" max="5000" />
+    </div>
+    <div class="row">
+      <label>距离阈值 (σ 倍数)</label>
+      <input id="kSigma" type="number" value="2.0" min="0.5" max="5" step="0.1" />
+    </div>
+  </div>
+  <div id="legend">
+    <div><span class="dot" style="background:#60a5fa"></span>碎片 A（参考 / 固定）</div>
+    <div><span class="dot" style="background:#f87171"></span>碎片 B（被对齐 / 动画）</div>
+    <div><span class="dot" style="background:#facc15"></span>拼接成功（最终状态）</div>
+  </div>
+  <div id="log"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
