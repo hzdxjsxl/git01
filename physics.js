@@ -10,6 +10,7 @@ class Body {
         this.position = position.clone();
         this.velocity = velocity.clone();
         this.acceleration = new THREE.Vector3();
+        this.prevAcceleration = null;
         this.color = color || new THREE.Color(0xffffff);
     }
 }
@@ -58,12 +59,25 @@ class GravitySystem {
     }
 
     step(dt) {
+        if (this.bodies[0].prevAcceleration === null) {
+            this.computeAccelerations();
+            for (const body of this.bodies) {
+                body.prevAcceleration = body.acceleration.clone();
+            }
+        }
+
+        for (const body of this.bodies) {
+            body.position.x += body.velocity.x * dt + 0.5 * body.prevAcceleration.x * dt * dt;
+            body.position.y += body.velocity.y * dt + 0.5 * body.prevAcceleration.y * dt * dt;
+            body.position.z += body.velocity.z * dt + 0.5 * body.prevAcceleration.z * dt * dt;
+        }
+
         this.computeAccelerations();
 
         for (const body of this.bodies) {
-            body.velocity.x += body.acceleration.x * dt;
-            body.velocity.y += body.acceleration.y * dt;
-            body.velocity.z += body.acceleration.z * dt;
+            body.velocity.x += 0.5 * (body.prevAcceleration.x + body.acceleration.x) * dt;
+            body.velocity.y += 0.5 * (body.prevAcceleration.y + body.acceleration.y) * dt;
+            body.velocity.z += 0.5 * (body.prevAcceleration.z + body.acceleration.z) * dt;
 
             const speed = Math.sqrt(
                 body.velocity.x * body.velocity.x +
@@ -77,9 +91,7 @@ class GravitySystem {
                 body.velocity.z *= scale;
             }
 
-            body.position.x += body.velocity.x * dt;
-            body.position.y += body.velocity.y * dt;
-            body.position.z += body.velocity.z * dt;
+            body.prevAcceleration.copy(body.acceleration);
         }
     }
 }
