@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>剧本杀线索墙</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: "Microsoft YaHei", sans-serif; color: #e0e0e0; }
+  
+  #viewport {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    cursor: grab;
+  }
+  #viewport.dragging-card { cursor: grabbing; }
+  #viewport.panning { cursor: grabbing; }
+  
+  #world {
+    position: absolute;
+    top: 0; left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+  
+  #grid-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+  }
+  
+  .card {
+    position: absolute;
+    width: 180px;
+    min-height: 60px;
+    background: linear-gradient(135deg, #2d2d44 0%, #3d3d5c 100%);
+    border: 2px solid #5c5c8a;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    cursor: grab;
+    user-select: none;
+    will-change: transform;
+    transition: box-shadow 0.15s;
+  }
+  .card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.6), 0 0 12px rgba(120,120,255,0.3); }
+  .card.dragging { cursor: grabbing; box-shadow: 0 8px 30px rgba(0,0,0,0.7), 0 0 20px rgba(120,120,255,0.5); z-index: 1000; }
+  
+  .card-owner {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #1a1a2e;
+  }
+  
+  .card-text {
+    font-size: 13px;
+    line-height: 1.4;
+    outline: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  
+  #toolbar {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    background: rgba(30,30,50,0.9);
+    padding: 10px 16px;
+    border-radius: 24px;
+    border: 1px solid #3d3d5c;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+  }
+  
+  .btn {
+    background: #4a4a6a;
+    border: 1px solid #5c5c8a;
+    color: #e0e0e0;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+  }
+  .btn:hover { background: #5c5c8a; }
+  .btn:active { background: #3d3d5c; }
+  
+  #status {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    background: rgba(30,30,50,0.9);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    border: 1px solid #3d3d5c;
+    z-index: 100;
+  }
+  
+  #status .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: #f44;
+  }
+  #status .dot.connected { background: #4c4; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button class="btn" id="add-card">+ 添加线索</button>
+  <button class="btn" id="reset-view">重置视角</button>
+</div>
+
+<div id="status">
+  <span class="dot" id="conn-dot"></span>
+  <span id="conn-text">连接中...</span>
+</div>
+
+<div id="viewport">
+  <div id="world">
+    <canvas id="grid-canvas"></canvas>
+    <div id="cards-layer"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const COLORS = ['#ff6b6b','#4ecdc4','#ffe66d','#95e1d3','#a55eea','#fd9644','#778ca3','#eb3b5a'];
+  const playerId = Math.random().toString(36).slice(2,10);
+  const playerColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+  let seqCounter = 0;
+
+  const viewport = document.getElementById('viewport');
+  const world = document.getElementById('world');
+  const gridCanvas = document.getElementById('grid-canvas');
+  const gridCtx = gridCanvas.getContext('2d');
+  const cardsLayer = document.getElementById('cards-layer');
+  const connDot = document.getElementById('conn-dot');
+  const connText = document.getElementById('conn-text');
+
+  let viewX = 0, viewY = 0, viewScale = 1;
+  let isPanning = false, panStartX = 0, panStartY = 0, panStartViewX = 0, panStartViewY = 0;
+  let dragCard = null, dragOffX = 0, dragOffY = 0, dragMoved = false;
+
+  const cards = new Map();
+
+  function applyTransform() {
+    world.style.transform = `translate(${viewX}px, ${viewY}px) scale(${viewScale})`;
+  }
+
+  function screenToWorld(sx, sy) {
+    return { x: (sx - viewX) / viewScale, y: (sy - viewY) / viewScale };
+  }
+
+  function drawGrid() {
+    const w = viewport.clientWidth;
+    const h = viewport.clientHeight;
+    gridCanvas.width = w;
+    gridCanvas.height = h;
+
+    const size = 50 * viewScale;
+    const offsetX = viewX % size;
+    const offsetY = viewY % size;
+
+    gridCtx.clearRect(0, 0, w, h);
+    gridCtx.strokeStyle = 'rgba(80,80,120,0.25)';
+    gridCtx.lineWidth = 1;
+    gridCtx.beginPath();
+    for (let x = offsetX; x < w; x += size) {
+      gridCtx.moveTo(x, 0);
+      gridCtx.lineTo(x, h);
+    }
+    for (let y = offsetY; y < h; y += size) {
+      gridCtx.moveTo(0, y);
+      gridCtx.lineTo(w, y);
+    }
+    gridCtx.stroke();
+
+    const sizeBig = 250 * viewScale;
+    const offsetXBig = viewX % sizeBig;
+    const offsetYBig = viewY % sizeBig;
+    gridCtx.strokeStyle = 'rgba(80,80,120,0.45)';
+    gridCtx.lineWidth = 1;
+    gridCtx.beginPath();
+    for (let x = offsetXBig; x < w; x += sizeBig) {
+      gridCtx.moveTo(x, 0);
+      gridCtx.lineTo(x, h);
+    }
+    for (let y = offsetYBig; y < h; y += sizeBig) {
+      gridCtx.moveTo(0, y);
+      gridCtx.lineTo(w, y);
+    }
+    gridCtx.stroke();
+  }
+
+  function createCard(id, x, y, text, isLocal) {
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.dataset.id = id;
+
+    const ownerDot = document.createElement('div');
+    ownerDot.className = 'card-owner';
+    ownerDot.style.background = playerColor;
+    el.appendChild(ownerDot);
+
+    const textEl = document.createElement('div');
+    textEl.className = 'card-text';
+    textEl.contentEditable = 'true';
+    textEl.textContent = text || '';
+    textEl.addEventListener('mousedown', (e) => e.stopPropagation());
+    el.appendChild(textEl);
+
+    el.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = el.getBoundingClientRect();
+      dragCard = { id, el, textEl };
+      dragOffX = e.clientX - rect.left;
+      dragOffY = e.clientY - rect.top;
+      dragMoved = false;
+      el.classList.add('dragging');
+      viewport.classList.add('dragging-card');
+    });
+
+    cardsLayer.appendChild(el);
+    cards.set(id, { id, x, y, el, textEl, seq: 0, ownerColor: playerColor });
+    return el;
+  }
+
+  function updateCardPosition(id, x, y, seq) {
+    const card = cards.get(id);
+    if (!card) return;
+    if (seq !== undefined && seq < card.seq) return;
+    if (seq !== undefined) card.seq = seq;
+    card.x = x;
+    card.y = y;
+    card.el.style.transform = '';
+    card.el.style.left = x + 'px';
+    card.el.style.top = y + 'px';
+  }
+
+  function smoothUpdateCard(id, x, y, seq) {
+    const card = cards.get(id);
+    if (!card) return;
+    if (seq !== undefined && seq < card.seq) return;
+    
+    const startX = card.x;
+    const startY = card.y;
+    const dx = x - startX;
+    const dy = y - startY;
+    const duration = 120;
+    const startTime = performance.now();
+
+    if (seq !== undefined) card.seq = seq;
+
+    function animate(now) {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      const cx = startX + dx * ease;
+      const cy = startY + dy * ease;
+      card.el.style.left = cx + 'px';
+      card.el.style.top = cy + 'px';
+      if (t < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        card.x = x;
+        card.y = y;
+      }
+    }
+    requestAnimationFrame(animate);
+  }
+
+  let ws;
+  let reconnectTimer = null;
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}`);
+
+    ws.onopen = () => {
+      connDot.classList.add('connected');
+      connText.textContent = '已连接';
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    };
+
+    ws.onclose = () => {
+      connDot.classList.remove('connected');
+      connText.textContent = '连接断开，重连中...';
+      if (!reconnectTimer) {
+        reconnectTimer = setTimeout(connect, 2000);
+      }
+    };
+
+    ws.onerror = () => { ws.close(); };
+
+    ws.onmessage = (event) => {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch (e) { return; }
+
+      if (msg.type === 'init') {
+        for (const [id, data] of Object.entries(msg.cards || {})) {
+          if (!cards.has(id)) {
+            createCard(id, data.x, data.y, data.text, false);
+          }
+        }
+      } else if (msg.type === 'card-move') {
+        if (msg.playerId === playerId) return;
+        if (cards.has(msg.id)) {
+          smoothUpdateCard(msg.id, msg.x, msg.y, msg.seq);
+        }
+      } else if (msg.type === 'card-create') {
+        if (!cards.has(msg.id)) {
+          createCard(msg.id, msg.x, msg.y, msg.text, false);
+        }
+      } else if (msg.type === 'card-delete') {
+        const card = cards.get(msg.id);
+        if (card) {
+          card.el.remove();
+          cards.delete(msg.id);
+        }
+      }
+    };
+  }
+
+  function sendMove(id, x, y) {
+    const seq = ++seqCounter;
+    const card = cards.get(id);
+    if (card) card.seq = seq;
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'card-move', id, x, y, playerId, seq }));
+    }
+  }
+
+  function sendCreate(id, x, y, text) {
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'card-create', id, x, y, text }));
+    }
+  }
+
+  function sendDelete(id) {
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'card-delete', id }));
+    }
+  }
+
+  document.addEventListener('mousemove', (e) => {
+    if (dragCard) {
+      const worldPos = screenToWorld(e.clientX, e.clientY);
+      const nx = worldPos.x - dragOffX / viewScale;
+      const ny = worldPos.y - dragOffY / viewScale;
+      dragCard.el.style.left = nx + 'px';
+      dragCard.el.style.top = ny + 'px';
+      const card = cards.get(dragCard.id);
+      if (card) { card.x = nx; card.y = ny; }
+      dragMoved = true;
+      sendMove(dragCard.id, nx, ny);
+    } else if (isPanning) {
+      viewX = panStartViewX + (e.clientX - panStartX);
+      viewY = panStartViewY + (e.clientY - panStartY);
+      applyTransform();
+      drawGrid();
+    }
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (dragCard) {
+      dragCard.el.classList.remove('dragging');
+      viewport.classList.remove('dragging-card');
+      if (!dragMoved) {
+        dragCard.textEl.focus();
+      }
+      dragCard = null;
+    }
+    if (isPanning) {
+      isPanning = false;
+      viewport.classList.remove('panning');
+    }
+  });
+
+  viewport.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (e.target === viewport || e.target === world || e.target === gridCanvas || e.target === cardsLayer) {
+      isPanning = true;
+      panStartX = e.clientX;
+      panStartY = e.clientY;
+      panStartViewX = viewX;
+      panStartViewY = viewY;
+      viewport.classList.add('panning');
+    }
+  });
+
+  viewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const oldScale = viewScale;
+    const delta = -e.deltaY * 0.001;
+    viewScale = Math.max(0.2, Math.min(5, viewScale * (1 + delta)));
+    
+    const rect = viewport.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    viewX = mx - (mx - viewX) * (viewScale / oldScale);
+    viewY = my - (my - viewY) * (viewScale / oldScale);
+    
+    applyTransform();
+    drawGrid();
+  }, { passive: false });
+
+  document.getElementById('add-card').addEventListener('click', () => {
+    const id = 'card-' + Math.random().toString(36).slice(2, 10);
+    const worldCenter = screenToWorld(viewport.clientWidth / 2, viewport.clientHeight / 2);
+    createCard(id, worldCenter.x - 90, worldCenter.y - 30, '', true);
+    sendCreate(id, worldCenter.x - 90, worldCenter.y - 30, '');
+  });
+
+  document.getElementById('reset-view').addEventListener('click', () => {
+    viewX = 0; viewY = 0; viewScale = 1;
+    applyTransform();
+    drawGrid();
+  });
+
+  applyTransform();
+  drawGrid();
+  window.addEventListener('resize', drawGrid);
+  connect();
+})();
+</script>
+</body>
+</html>
