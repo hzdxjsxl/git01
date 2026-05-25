@@ -1,0 +1,12 @@
+{
+  "name": "approval-flow-system",
+  "version": "1.0.0",
+  "description": "全栈网页审批流系统 - 前端有向图解析 + 动态审批流程",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

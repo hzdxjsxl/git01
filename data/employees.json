@@ -1,0 +1,14 @@
+[
+  { "id": "emp001", "name": "张三",  "dept": "财务部",   "title": "财务专员", "manager": "emp002",  "approvalLimit": 0 },
+  { "id": "emp002", "name": "李四",  "dept": "财务部",   "title": "财务主管", "manager": "emp003",  "approvalLimit": 50000 },
+  { "id": "emp003", "name": "王五",  "dept": "财务部",   "title": "财务总监", "manager": "emp008",  "approvalLimit": 200000 },
+  { "id": "emp004", "name": "赵六",  "dept": "市场部",   "title": "市场专员", "manager": "emp005",  "approvalLimit": 0 },
+  { "id": "emp005", "name": "钱七",  "dept": "市场部",   "title": "市场经理", "manager": "emp008",  "approvalLimit": 100000 },
+  { "id": "emp006", "name": "孙八",  "dept": "研发部",   "title": "研发工程师", "manager": "emp007",  "approvalLimit": 0 },
+  { "id": "emp007", "name": "周九",  "dept": "研发部",   "title": "研发总监", "manager": "emp008",  "approvalLimit": 300000 },
+  { "id": "emp008", "name": "吴十",  "dept": "总裁办",   "title": "CEO",     "manager": null,     "approvalLimit": 999999999 },
+  { "id": "emp009", "name": "郑十一", "dept": "人事部",  "title": "HR专员",  "manager": "emp010", "approvalLimit": 0 },
+  { "id": "emp010", "name": "王十二", "dept": "人事部",  "title": "HR总监",  "manager": "emp008", "approvalLimit": 150000 },
+  { "id": "emp011", "name": "刘十三", "dept": "采购部",  "title": "采购员",  "manager": "emp012", "approvalLimit": 0 },
+  { "id": "emp012", "name": "陈十四", "dept": "采购部",  "title": "采购经理", "manager": "emp003", "approvalLimit": 80000 }
+]

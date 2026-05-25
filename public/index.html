@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>审批流可视化系统</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo">✓</div>
+        <div class="title-group">
+          <h1>审批流可视化系统</h1>
+          <p class="subtitle">基于有向图的动态审批流程引擎</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="status-dot"></span>
+        <span class="status-text">系统运行中</span>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <aside class="sidebar">
+        <div class="panel">
+          <div class="panel-title">流程配置</div>
+
+          <div class="form-group">
+            <label for="dept">选择部门</label>
+            <select id="dept" class="form-control">
+              <option value="">全部部门</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="applicant">选择申请人</label>
+            <select id="applicant" class="form-control"></select>
+          </div>
+
+          <div class="form-group">
+            <label for="amount">申请金额 (元)</label>
+            <input type="number" id="amount" class="form-control" value="50000" min="0" step="1000">
+          </div>
+
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="showGrid" checked>
+            <label for="showGrid">显示网格</label>
+          </div>
+
+          <button id="generate" class="btn btn-primary">
+            <span>⚡</span> 生成审批流
+          </button>
+
+          <button id="resetZoom" class="btn btn-secondary">
+            <span>↺</span> 重置缩放
+          </button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">操作提示</div>
+          <ul class="tips">
+            <li>滚轮缩放画布</li>
+            <li>拖拽平移画布</li>
+            <li>蓝色=申请人</li>
+            <li>绿色=审批人</li>
+            <li>橙色=终审人</li>
+          </ul>
+        </div>
+
+        <div id="infoPanel" class="info-panel"></div>
+      </aside>
+
+      <section class="canvas-container">
+        <div class="canvas-wrapper">
+          <canvas id="canvas"></canvas>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <span>审批流可视化系统 v1.0</span>
+      <span class="footer-sep">|</span>
+      <span>有向图解析 + 动态审批链 + 无交叉排版</span>
+    </footer>
+  </div>
+
+  <script src="js/graph-parser.js"></script>
+  <script src="js/approval-engine.js"></script>
+  <script src="js/layout-engine.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
