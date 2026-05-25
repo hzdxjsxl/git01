@@ -1,6 +1,14 @@
 /**
  * 驾考刷题网页 - 主逻辑
  * 包含: Fisher-Yates 洗牌算法、答题状态管理、时间轴回溯、回放功能
+ *
+ * 时间轴设计原则:
+ *   - state.elapsed  永远是「相对考试开始的毫秒数」，范围 [0, EXAM_DURATION_MS]
+ *   - state.startTime  永远是「考试开始的绝对时间戳」
+ *   - 快照引擎 SnapshotEngine 内部存储绝对时间戳
+ *   - 时间轴滑块百分比 → 相对毫秒数: pct * EXAM_DURATION_MS
+ *   - 查快照时: absTime = startTime + relativeMs
+ *   - 任何时候都不允许把绝对时间戳写入 state.elapsed
  */
 
 (function () {
@@ -60,6 +68,10 @@
     return a;
   }
 
+  function clampElapsed(ms) {
+    return Math.max(0, Math.min(EXAM_DURATION_MS, ms));
+  }
+
   async function loadQuestions() {
     const res = await fetch('/api/questions');
     const data = await res.json();
@@ -75,6 +87,8 @@
     state.elapsed = 0;
     state.timeTravelMode = false;
     state.isPlaying = false;
+    state.originalAnswers = null;
+    state.originalCurrentIndex = 0;
 
     engine.clear();
     engine.record(state.startTime, { answers: {}, currentIndex: 0 });
@@ -88,7 +102,7 @@
     if (state.timerId) clearInterval(state.timerId);
     state.timerId = setInterval(() => {
       if (!state.timeTravelMode) {
-        state.elapsed = Date.now() - state.startTime;
+        state.elapsed = clampElapsed(Date.now() - state.startTime);
         updateTimelineUI();
         renderStats();
       }
@@ -273,14 +287,15 @@
     el.answeredCount.textContent = answered.length;
     const correctCount = answered.filter(a => a.isCorrect).length;
     el.correctCount.textContent = correctCount;
-    el.elapsedTime.textContent = formatTime(state.elapsed);
+    el.elapsedTime.textContent = formatTime(clampElapsed(state.elapsed));
   }
 
   function updateTimelineUI() {
-    const pct = Math.min(100, (state.elapsed / EXAM_DURATION_MS) * 100);
+    const safeElapsed = clampElapsed(state.elapsed);
+    const pct = (safeElapsed / EXAM_DURATION_MS) * 100;
     el.timelineFill.style.width = pct + '%';
     el.timelineThumb.style.left = pct + '%';
-    el.timelineCurrent.textContent = formatTime(state.elapsed);
+    el.timelineCurrent.textContent = formatTime(safeElapsed);
     el.timelineEnd.textContent = formatTime(EXAM_DURATION_MS);
   }
 
@@ -307,11 +322,15 @@
     el.timelineInfo.textContent =
       '点击时间条上的任意位置，可让整张卷子回放到那个时刻的答题状态。';
     stopPlayback();
+    state.elapsed = clampElapsed(Date.now() - state.startTime);
     renderAll();
   }
 
-  function timeTravelTo(targetTime) {
-    const snap = engine.snapshotAt(targetTime);
+  function timeTravelTo(relativeMs) {
+    const clampedRelative = clampElapsed(relativeMs);
+    const absTime = state.startTime + clampedRelative;
+
+    const snap = engine.snapshotAt(absTime);
     if (!snap) return;
 
     const restored = engine.restore(snap);
@@ -327,9 +346,7 @@
       state.answers[id] = { ...restored.answers[id] };
     }
     state.currentIndex = restored.currentIndex;
-
-    const now = Date.now();
-    state.elapsed = targetTime;
+    state.elapsed = clampedRelative;
     renderAll();
   }
 
@@ -348,9 +365,10 @@
     el.playBtn.disabled = true;
     el.pauseBtn.disabled = false;
 
-    state.playTargetTime = Date.now() - state.startTime;
+    const realElapsed = clampElapsed(Date.now() - state.startTime);
+    state.playTargetTime = realElapsed;
 
-    if (state.elapsed >= state.playTargetTime) {
+    if (state.elapsed >= realElapsed) {
       state.elapsed = 0;
     }
 
@@ -359,13 +377,17 @@
 
       if (state.elapsed >= state.playTargetTime) {
         state.elapsed = state.playTargetTime;
+        const wasPlaying = state.isPlaying;
         stopPlayback();
         exitTimeTravelMode();
+        if (wasPlaying) {
+          state.elapsed = realElapsed;
+        }
         return;
       }
 
-      const targetTime = state.startTime + state.elapsed;
-      const snap = engine.snapshotAt(targetTime);
+      const absTime = state.startTime + state.elapsed;
+      const snap = engine.snapshotAt(absTime);
       if (snap) {
         const restored = engine.restore(snap);
         if (restored) {
@@ -404,6 +426,7 @@
         enterTimeTravelMode();
       } else {
         exitTimeTravelMode();
+        state.originalAnswers = null;
       }
     });
 
@@ -419,8 +442,8 @@
           state.originalCurrentIndex = state.currentIndex;
           enterTimeTravelMode();
         }
-        const targetTime = state.startTime + pct * EXAM_DURATION_MS;
-        timeTravelTo(targetTime);
+        const relativeMs = pct * EXAM_DURATION_MS;
+        timeTravelTo(relativeMs);
       }
     });
 
@@ -442,8 +465,8 @@
         state.originalCurrentIndex = state.currentIndex;
         enterTimeTravelMode();
       }
-      const targetTime = state.startTime + pct * EXAM_DURATION_MS;
-      timeTravelTo(targetTime);
+      const relativeMs = pct * EXAM_DURATION_MS;
+      timeTravelTo(relativeMs);
     });
 
     document.addEventListener('mouseup', () => {
