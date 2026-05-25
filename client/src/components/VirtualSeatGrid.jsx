@@ -3,8 +3,12 @@ import './VirtualSeatGrid.css';
 
 const SEAT_SIZE = 22;
 const SEAT_GAP = 3;
+const SEAT_STRIDE = SEAT_SIZE + SEAT_GAP;
 const ROW_HEIGHT = SEAT_SIZE + SEAT_GAP;
-const BUFFER_ROWS = 6;
+const LABEL_WIDTH = 36;
+const BUFFER_ROWS = 2;
+const BUFFER_COLS = 4;
+
 const SEAT_CLASS_MAP = {
   0: 'seat available',
   1: 'seat taken',
@@ -20,24 +24,43 @@ export default function VirtualSeatGrid({
 }) {
   const containerRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(800);
   const [viewportHeight, setViewportHeight] = useState(600);
   const rafRef = useRef(null);
 
+  const totalWidth = LABEL_WIDTH + cols * SEAT_STRIDE;
   const totalHeight = rows * ROW_HEIGHT;
 
   const visibleRange = useMemo(() => {
-    const startRow = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_ROWS);
+    const startRow = Math.max(
+      0,
+      Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_ROWS
+    );
     const endRow = Math.min(
       rows,
       Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + BUFFER_ROWS
     );
-    return { startRow, endRow };
-  }, [scrollTop, viewportHeight, rows]);
+
+    const seatScrollLeft = Math.max(0, scrollLeft - LABEL_WIDTH);
+    const startCol = Math.max(
+      0,
+      Math.floor(seatScrollLeft / SEAT_STRIDE) - BUFFER_COLS
+    );
+    const endCol = Math.min(
+      cols,
+      Math.ceil((scrollLeft + viewportWidth - LABEL_WIDTH) / SEAT_STRIDE) +
+        BUFFER_COLS
+    );
+
+    return { startRow, endRow, startCol, endCol };
+  }, [scrollTop, scrollLeft, viewportWidth, viewportHeight, rows, cols]);
 
   const handleScroll = useCallback((e) => {
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       setScrollTop(e.target.scrollTop);
+      setScrollLeft(e.target.scrollLeft);
       rafRef.current = null;
     });
   }, []);
@@ -45,13 +68,14 @@ export default function VirtualSeatGrid({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    setViewportHeight(container.clientHeight);
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setViewportHeight(entry.contentRect.height);
-      }
-    });
+    const updateSize = () => {
+      setViewportWidth(container.clientWidth);
+      setViewportHeight(container.clientHeight);
+    };
+    updateSize();
+
+    const observer = new ResizeObserver(updateSize);
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
@@ -70,18 +94,34 @@ export default function VirtualSeatGrid({
 
   if (!seatData) return null;
 
-  const { startRow, endRow } = visibleRange;
+  const { startRow, endRow, startCol, endCol } = visibleRange;
 
-  const renderedRows = [];
+  const labelNodes = [];
   for (let row = startRow; row < endRow; row++) {
-    const startIndex = row * cols;
-    const endIndex = Math.min(startIndex + cols, seatData.length);
-    const seats = [];
+    labelNodes.push(
+      <div
+        key={`l-${row}`}
+        className="row-label"
+        style={{
+          top: row * ROW_HEIGHT,
+          height: ROW_HEIGHT,
+        }}
+      >
+        {row + 1}
+      </div>
+    );
+  }
 
-    for (let i = startIndex; i < endIndex; i++) {
-      const state = seatData[i];
-      const isSelected = selectedSeats.has(i);
-      const isPending = pendingSeats.has(i);
+  const seatNodes = [];
+  for (let row = startRow; row < endRow; row++) {
+    const rowBase = row * cols;
+    for (let col = startCol; col < endCol; col++) {
+      const index = rowBase + col;
+      if (index >= seatData.length) break;
+
+      const state = seatData[index];
+      const isSelected = selectedSeats.has(index);
+      const isPending = pendingSeats.has(index);
 
       let className = SEAT_CLASS_MAP[state] || 'seat available';
       if (isPending) {
@@ -90,28 +130,21 @@ export default function VirtualSeatGrid({
         className = 'seat selected';
       }
 
-      const seatNumber = `R${row + 1}-${(i % cols) + 1}`;
-
-      seats.push(
+      seatNodes.push(
         <div
-          key={i}
+          key={`s-${row}-${col}`}
           className={className}
-          data-index={i}
-          title={seatNumber}
+          data-index={index}
+          style={{
+            top: row * ROW_HEIGHT,
+            left: LABEL_WIDTH + col * SEAT_STRIDE,
+            width: SEAT_SIZE,
+            height: SEAT_SIZE,
+          }}
+          title={`R${row + 1}-${col + 1}`}
         />
       );
     }
-
-    renderedRows.push(
-      <div
-        key={row}
-        className="seat-row"
-        style={{ transform: `translateY(${row * ROW_HEIGHT}px)` }}
-      >
-        <div className="row-label">{row + 1}</div>
-        <div className="seat-row-grid">{seats}</div>
-      </div>
-    );
   }
 
   return (
@@ -123,17 +156,24 @@ export default function VirtualSeatGrid({
     >
       <div
         className="virtual-seat-spacer"
-        style={{ height: totalHeight }}
+        style={{ width: totalWidth, height: totalHeight }}
+      />
+      <div
+        className="virtual-seat-labels"
+        style={{
+          width: LABEL_WIDTH,
+          transform: `translate3d(0, ${-scrollTop}px, 0)`,
+        }}
       >
-        <div
-          className="virtual-seat-viewport"
-          style={{
-            transform: `translateY(${startRow * ROW_HEIGHT}px)`,
-            height: (endRow - startRow) * ROW_HEIGHT,
-          }}
-        >
-          {renderedRows}
-        </div>
+        {labelNodes}
+      </div>
+      <div
+        className="virtual-seat-world"
+        style={{
+          transform: `translate3d(${-scrollLeft}px, ${-scrollTop}px, 0)`,
+        }}
+      >
+        {seatNodes}
       </div>
     </div>
   );
