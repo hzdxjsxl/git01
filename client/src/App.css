@@ -89,9 +89,19 @@ body {
   border: 1.5px solid #ddd;
 }
 
-.legend-box.conflict {
+.legend-box.conflict-room {
   background: #ffe0e0;
   border-color: #ff6b6b;
+}
+
+.legend-box.conflict-coach {
+  background: #e0f0ff;
+  border-color: #4a90e2;
+}
+
+.legend-box.conflict-both {
+  background: repeating-linear-gradient(45deg, #ffe0e0, #ffe0e0 5px, #e0f0ff 5px, #e0f0ff 10px);
+  border-color: #e74c3c;
 }
 
 .legend-box.dragging {
@@ -191,9 +201,19 @@ body {
   background: #fff;
 }
 
-.schedule-cell.conflict {
+.schedule-cell.conflict-room {
   background: #ffe0e0 !important;
   box-shadow: inset 0 0 0 2px #ff6b6b;
+}
+
+.schedule-cell.conflict-coach {
+  background: #e0f0ff !important;
+  box-shadow: inset 0 0 0 2px #4a90e2;
+}
+
+.schedule-cell.conflict-both {
+  background: repeating-linear-gradient(45deg, #ffe0e0, #ffe0e0 5px, #e0f0ff 5px, #e0f0ff 10px) !important;
+  box-shadow: inset 0 0 0 2px #e74c3c;
 }
 
 .schedule-cell.dragging-source {

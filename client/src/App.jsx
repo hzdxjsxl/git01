@@ -4,25 +4,35 @@ const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '
 
 function buildSchedule(coaches, rooms, timeSlots) {
   const schedule = {};
-  const coachIndex = {};
-  let idx = 0;
 
   timeSlots.forEach(ts => {
     schedule[ts.id] = {};
+    const usedCoachIds = new Set();
+
     rooms.forEach(room => {
-      const coach = coaches[idx % coaches.length];
-      idx++;
-      schedule[ts.id][room.id] = {
-        coachId: coach.id,
-        coachName: coach.name,
-        coachStyle: coach.style,
-        roomId: room.id,
-        roomName: room.name,
-        timeSlotId: ts.id,
-        day: ts.day,
-        start: ts.start,
-        end: ts.end
-      };
+      let assigned = null;
+
+      for (const coach of coaches) {
+        if (!usedCoachIds.has(coach.id)) {
+          assigned = coach;
+          usedCoachIds.add(coach.id);
+          break;
+        }
+      }
+
+      if (assigned) {
+        schedule[ts.id][room.id] = {
+          coachId: assigned.id,
+          coachName: assigned.name,
+          coachStyle: assigned.style,
+          roomId: room.id,
+          roomName: room.name,
+          timeSlotId: ts.id,
+          day: ts.day,
+          start: ts.start,
+          end: ts.end
+        };
+      }
     });
   });
 
@@ -33,7 +43,7 @@ function App() {
   const [data, setData] = useState({ rooms: [], coaches: [], timeSlots: [] });
   const [schedule, setSchedule] = useState({});
   const [dragging, setDragging] = useState(null);
-  const [conflicts, setConflicts] = useState(new Set());
+  const [conflicts, setConflicts] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -69,15 +79,33 @@ function App() {
   }, [timeSlots]);
 
   const checkConflict = useCallback((targetTimeSlotId, targetRoomId, sourceAssignment) => {
-    const occupied = schedule[targetTimeSlotId] && schedule[targetTimeSlotId][targetRoomId];
-    if (!occupied) return false;
-    if (sourceAssignment &&
-        occupied.coachId === sourceAssignment.coachId &&
-        occupied.roomId === sourceAssignment.roomId &&
-        occupied.timeSlotId === sourceAssignment.timeSlotId) {
-      return false;
+    const result = { roomConflict: false, coachConflict: false, isConflict: false };
+
+    const existing = schedule[targetTimeSlotId] && schedule[targetTimeSlotId][targetRoomId];
+    if (existing) {
+      const isSameCell = sourceAssignment &&
+        existing.coachId === sourceAssignment.coachId &&
+        existing.roomId === sourceAssignment.roomId &&
+        existing.timeSlotId === sourceAssignment.timeSlotId;
+      if (!isSameCell) {
+        result.roomConflict = true;
+        result.isConflict = true;
+      }
     }
-    return true;
+
+    if (sourceAssignment && sourceAssignment.timeSlotId !== targetTimeSlotId) {
+      const dayAssignments = schedule[targetTimeSlotId] || {};
+      for (const rid in dayAssignments) {
+        const a = dayAssignments[rid];
+        if (a.coachId === sourceAssignment.coachId && a.roomId !== targetRoomId) {
+          result.coachConflict = true;
+          result.isConflict = true;
+          break;
+        }
+      }
+    }
+
+    return result;
   }, [schedule]);
 
   const handleDragStart = (e, assignment) => {
@@ -88,14 +116,14 @@ function App() {
   const handleDragOver = (e, timeSlotId, roomId) => {
     e.preventDefault();
     if (!dragging) return;
-    const isConflict = checkConflict(timeSlotId, roomId, dragging);
+    const conflictInfo = checkConflict(timeSlotId, roomId, dragging);
     const cellKey = `${timeSlotId}_${roomId}`;
     setConflicts(prev => {
-      const next = new Set(prev);
-      if (isConflict) {
-        next.add(cellKey);
+      const next = { ...prev };
+      if (conflictInfo.isConflict) {
+        next[cellKey] = conflictInfo;
       } else {
-        next.delete(cellKey);
+        delete next[cellKey];
       }
       return next;
     });
@@ -104,8 +132,8 @@ function App() {
   const handleDragLeave = (e, timeSlotId, roomId) => {
     const cellKey = `${timeSlotId}_${roomId}`;
     setConflicts(prev => {
-      const next = new Set(prev);
-      next.delete(cellKey);
+      const next = { ...prev };
+      delete next[cellKey];
       return next;
     });
   };
@@ -116,12 +144,13 @@ function App() {
 
     const cellKey = `${timeSlotId}_${roomId}`;
     setConflicts(prev => {
-      const next = new Set(prev);
-      next.delete(cellKey);
+      const next = { ...prev };
+      delete next[cellKey];
       return next;
     });
 
-    if (checkConflict(timeSlotId, roomId, dragging)) {
+    const conflictInfo = checkConflict(timeSlotId, roomId, dragging);
+    if (conflictInfo.isConflict) {
       return;
     }
 
@@ -148,7 +177,7 @@ function App() {
 
   const handleDragEnd = () => {
     setDragging(null);
-    setConflicts(new Set());
+    setConflicts({});
   };
 
   if (loading) {
@@ -175,7 +204,9 @@ function App() {
       <header className="app-header">
         <h1>🧘 瑜伽馆周排课系统</h1>
         <div className="legend">
-          <span className="legend-item"><span className="legend-box conflict"></span>教室已被占用（拖拽至此处会被拒绝）</span>
+          <span className="legend-item"><span className="legend-box conflict-room"></span>教室已被占用</span>
+          <span className="legend-item"><span className="legend-box conflict-coach"></span>教练在此时段已有课</span>
+          <span className="legend-item"><span className="legend-box conflict-both"></span>教室+教练双重冲突</span>
           <span className="legend-item"><span className="legend-box dragging"></span>正在拖拽的课程卡片</span>
         </div>
       </header>
@@ -219,14 +250,20 @@ function App() {
                       {rooms.map(room => {
                         const cellKey = `${slot.id}_${room.id}`;
                         const assignment = schedule[slot.id] && schedule[slot.id][room.id];
-                        const isConflict = conflicts.has(cellKey);
+                        const conflictInfo = conflicts[cellKey];
+                        const isConflict = conflictInfo && conflictInfo.isConflict;
+                        const conflictClass = isConflict
+                          ? (conflictInfo.roomConflict && conflictInfo.coachConflict
+                              ? 'conflict-both'
+                              : conflictInfo.roomConflict ? 'conflict-room' : 'conflict-coach')
+                          : '';
                         const isDraggingSource = dragging &&
                           dragging.timeSlotId === slot.id &&
                           dragging.roomId === room.id;
                         return (
                           <td
                             key={room.id}
-                            className={`schedule-cell ${isConflict ? 'conflict' : ''} ${isDraggingSource ? 'dragging-source' : ''}`}
+                            className={`schedule-cell ${conflictClass} ${isDraggingSource ? 'dragging-source' : ''}`}
                             onDragOver={(e) => handleDragOver(e, slot.id, room.id)}
                             onDragLeave={(e) => handleDragLeave(e, slot.id, room.id)}
                             onDrop={(e) => handleDrop(e, slot.id, room.id)}
@@ -258,7 +295,7 @@ function App() {
       </div>
 
       <footer className="app-footer">
-        <p>提示：将教练卡片拖拽到其他时间段，系统会自动检测教室占用冲突</p>
+        <p>提示：将教练卡片拖拽到其他时间段，系统会自动检测教室占用 & 教练占用双重冲突</p>
         <p>后端: Node.js + Express（端口 3001） | 前端: React + Vite（端口 5173）</p>
       </footer>
     </div>
