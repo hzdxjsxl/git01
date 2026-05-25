@@ -42,10 +42,23 @@
     cursor: grab;
     user-select: none;
     will-change: transform;
-    transition: box-shadow 0.15s;
+    transition: box-shadow 0.15s, opacity 0.2s, filter 0.2s, border-color 0.2s;
   }
   .card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.6), 0 0 12px rgba(120,120,255,0.3); }
   .card.dragging { cursor: grabbing; box-shadow: 0 8px 30px rgba(0,0,0,0.7), 0 0 20px rgba(120,120,255,0.5); z-index: 1000; }
+  
+  .card.locked {
+    opacity: 0.45;
+    filter: grayscale(0.6);
+    cursor: not-allowed;
+    border-color: #8a3a3a;
+  }
+  .card.locked:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+  
+  .card.locked-by-other {
+    border-color: #d44;
+    box-shadow: 0 0 0 2px rgba(212,68,68,0.3), 0 4px 12px rgba(0,0,0,0.4);
+  }
   
   .card-owner {
     position: absolute;
@@ -56,6 +69,25 @@
     border-radius: 50%;
     border: 2px solid #1a1a2e;
   }
+  
+  .lock-indicator {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #d44;
+    border: 2px solid #1a1a2e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #fff;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .card.locked .lock-indicator { opacity: 1; }
   
   .card-text {
     font-size: 13px;
@@ -152,6 +184,7 @@
   let viewX = 0, viewY = 0, viewScale = 1;
   let isPanning = false, panStartX = 0, panStartY = 0, panStartViewX = 0, panStartViewY = 0;
   let dragCard = null, dragOffX = 0, dragOffY = 0, dragMoved = false;
+  let dragOriginalX = 0, dragOriginalY = 0;
 
   const cards = new Map();
 
@@ -204,12 +237,26 @@
     gridCtx.stroke();
   }
 
-  function createCard(id, x, y, text, isLocal) {
+  function setCardLocked(card, locked, lockedBy) {
+    card.lockedBy = locked || false;
+    if (locked && lockedBy !== playerId) {
+      card.el.classList.add('locked');
+    } else {
+      card.el.classList.remove('locked');
+    }
+  }
+
+  function createCard(id, x, y, text, lockedBy) {
     const el = document.createElement('div');
     el.className = 'card';
     el.style.left = x + 'px';
     el.style.top = y + 'px';
     el.dataset.id = id;
+
+    const lockIcon = document.createElement('div');
+    lockIcon.className = 'lock-indicator';
+    lockIcon.textContent = '!';
+    el.appendChild(lockIcon);
 
     const ownerDot = document.createElement('div');
     ownerDot.className = 'card-owner';
@@ -223,41 +270,53 @@
     textEl.addEventListener('mousedown', (e) => e.stopPropagation());
     el.appendChild(textEl);
 
+    const cardObj = {
+      id, x, y, el, textEl,
+      seq: 0,
+      ownerColor: playerColor,
+      lockedBy: null,
+      localDrag: false
+    };
+
     el.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
+
+      if (cardObj.lockedBy && cardObj.lockedBy !== playerId) {
+        return;
+      }
+
       const rect = el.getBoundingClientRect();
       dragCard = { id, el, textEl };
       dragOffX = e.clientX - rect.left;
       dragOffY = e.clientY - rect.top;
+      dragOriginalX = x;
+      dragOriginalY = y;
       dragMoved = false;
+      cardObj.localDrag = true;
       el.classList.add('dragging');
       viewport.classList.add('dragging-card');
+
+      sendLock(id);
     });
 
     cardsLayer.appendChild(el);
-    cards.set(id, { id, x, y, el, textEl, seq: 0, ownerColor: playerColor });
-    return el;
-  }
+    cards.set(id, cardObj);
 
-  function updateCardPosition(id, x, y, seq) {
-    const card = cards.get(id);
-    if (!card) return;
-    if (seq !== undefined && seq < card.seq) return;
-    if (seq !== undefined) card.seq = seq;
-    card.x = x;
-    card.y = y;
-    card.el.style.transform = '';
-    card.el.style.left = x + 'px';
-    card.el.style.top = y + 'px';
+    if (lockedBy && lockedBy !== playerId) {
+      setCardLocked(cardObj, true, lockedBy);
+    }
+
+    return el;
   }
 
   function smoothUpdateCard(id, x, y, seq) {
     const card = cards.get(id);
     if (!card) return;
+    if (card.localDrag) return;
     if (seq !== undefined && seq < card.seq) return;
-    
+
     const startX = card.x;
     const startY = card.y;
     const dx = x - startX;
@@ -268,6 +327,7 @@
     if (seq !== undefined) card.seq = seq;
 
     function animate(now) {
+      if (card.localDrag) return;
       const elapsed = now - startTime;
       const t = Math.min(elapsed / duration, 1);
       const ease = 1 - Math.pow(1 - t, 3);
@@ -315,8 +375,29 @@
       if (msg.type === 'init') {
         for (const [id, data] of Object.entries(msg.cards || {})) {
           if (!cards.has(id)) {
-            createCard(id, data.x, data.y, data.text, false);
+            createCard(id, data.x, data.y, data.text, data.lockedBy);
           }
+        }
+      } else if (msg.type === 'card-lock') {
+        if (msg.lockedBy !== playerId) {
+          const card = cards.get(msg.id);
+          if (card) {
+            setCardLocked(card, true, msg.lockedBy);
+          }
+        }
+      } else if (msg.type === 'card-lock-granted') {
+      } else if (msg.type === 'card-lock-denied') {
+        const card = cards.get(msg.id);
+        if (card) {
+          setCardLocked(card, true, msg.lockedBy);
+          if (dragCard && dragCard.id === msg.id) {
+            cancelDrag();
+          }
+        }
+      } else if (msg.type === 'card-unlock') {
+        const card = cards.get(msg.id);
+        if (card) {
+          setCardLocked(card, false, null);
         }
       } else if (msg.type === 'card-move') {
         if (msg.playerId === playerId) return;
@@ -325,7 +406,7 @@
         }
       } else if (msg.type === 'card-create') {
         if (!cards.has(msg.id)) {
-          createCard(msg.id, msg.x, msg.y, msg.text, false);
+          createCard(msg.id, msg.x, msg.y, msg.text, null);
         }
       } else if (msg.type === 'card-delete') {
         const card = cards.get(msg.id);
@@ -335,6 +416,18 @@
         }
       }
     };
+  }
+
+  function sendLock(id) {
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'card-lock', id, playerId }));
+    }
+  }
+
+  function sendUnlock(id) {
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'card-unlock', id, playerId }));
+    }
   }
 
   function sendMove(id, x, y) {
@@ -348,7 +441,7 @@
 
   function sendCreate(id, x, y, text) {
     if (ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: 'card-create', id, x, y, text }));
+      ws.send(JSON.stringify({ type: 'card-create', id, x, y, text, playerId }));
     }
   }
 
@@ -356,6 +449,21 @@
     if (ws.readyState === 1) {
       ws.send(JSON.stringify({ type: 'card-delete', id }));
     }
+  }
+
+  function cancelDrag() {
+    if (!dragCard) return;
+    const card = cards.get(dragCard.id);
+    if (card) {
+      card.localDrag = false;
+      card.el.style.left = dragOriginalX + 'px';
+      card.el.style.top = dragOriginalY + 'px';
+      card.x = dragOriginalX;
+      card.y = dragOriginalY;
+    }
+    dragCard.el.classList.remove('dragging');
+    viewport.classList.remove('dragging-card');
+    dragCard = null;
   }
 
   document.addEventListener('mousemove', (e) => {
@@ -379,8 +487,11 @@
 
   document.addEventListener('mouseup', (e) => {
     if (dragCard) {
+      const card = cards.get(dragCard.id);
+      if (card) card.localDrag = false;
       dragCard.el.classList.remove('dragging');
       viewport.classList.remove('dragging-card');
+      sendUnlock(dragCard.id);
       if (!dragMoved) {
         dragCard.textEl.focus();
       }
@@ -423,7 +534,7 @@
   document.getElementById('add-card').addEventListener('click', () => {
     const id = 'card-' + Math.random().toString(36).slice(2, 10);
     const worldCenter = screenToWorld(viewport.clientWidth / 2, viewport.clientHeight / 2);
-    createCard(id, worldCenter.x - 90, worldCenter.y - 30, '', true);
+    createCard(id, worldCenter.x - 90, worldCenter.y - 30, '', null);
     sendCreate(id, worldCenter.x - 90, worldCenter.y - 30, '');
   });
 

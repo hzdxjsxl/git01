@@ -25,51 +25,106 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
-let cards = new Map();
+const cards = new Map();
+
+function broadcast(data, exclude) {
+  const str = typeof data === 'string' ? data : JSON.stringify(data);
+  wss.clients.forEach((c) => {
+    if (c !== exclude && c.readyState === 1) c.send(str);
+  });
+}
+
+function sendTo(ws, data) {
+  if (ws.readyState === 1) ws.send(JSON.stringify(data));
+}
 
 wss.on('connection', (ws) => {
   ws.isAlive = true;
+  ws.playerId = null;
   ws.on('pong', () => { ws.isAlive = true; });
-
-  ws.send(JSON.stringify({ type: 'init', cards: Object.fromEntries(cards) }));
 
   ws.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch (e) { return; }
 
-    if (msg.type === 'card-move') {
+    if (!ws.playerId && msg.playerId) {
+      ws.playerId = msg.playerId;
+    }
+
+    if (msg.type === 'card-lock') {
+      const { id, playerId } = msg;
+      if (typeof id !== 'string') return;
+      const card = cards.get(id);
+      if (!card) return;
+
+      if (card.lockedBy && card.lockedBy !== playerId) {
+        sendTo(ws, { type: 'card-lock-denied', id, lockedBy: card.lockedBy });
+        return;
+      }
+
+      card.lockedBy = playerId;
+      sendTo(ws, { type: 'card-lock-granted', id, playerId });
+      broadcast({ type: 'card-lock', id, lockedBy: playerId }, ws);
+
+    } else if (msg.type === 'card-unlock') {
+      const { id, playerId } = msg;
+      if (typeof id !== 'string') return;
+      const card = cards.get(id);
+      if (!card) return;
+
+      if (card.lockedBy === playerId) {
+        card.lockedBy = null;
+        broadcast({ type: 'card-unlock', id });
+      }
+
+    } else if (msg.type === 'card-move') {
       const { id, x, y, playerId, seq } = msg;
       if (typeof id !== 'string' || typeof x !== 'number' || typeof y !== 'number') return;
-      cards.set(id, { x, y, playerId, seq: seq || 0 });
+      const card = cards.get(id);
+      if (!card) return;
 
-      const broadcast = JSON.stringify({
-        type: 'card-move',
-        id, x, y, playerId, seq: seq || 0
-      });
-      wss.clients.forEach((c) => {
-        if (c !== ws && c.readyState === 1) c.send(broadcast);
-      });
+      if (card.lockedBy && card.lockedBy !== playerId) return;
+
+      card.x = x;
+      card.y = y;
+      card.playerId = playerId;
+      card.seq = seq || 0;
+
+      broadcast({ type: 'card-move', id, x, y, playerId, seq: seq || 0 }, ws);
+
     } else if (msg.type === 'card-create') {
-      const { id, x, y, text } = msg;
+      const { id, x, y, text, playerId } = msg;
       if (typeof id !== 'string') return;
       if (!cards.has(id)) {
-        cards.set(id, { x: x || 0, y: y || 0, text: text || '' });
-        wss.clients.forEach((c) => {
-          if (c.readyState === 1) {
-            c.send(JSON.stringify({ type: 'card-create', id, x, y, text }));
-          }
-        });
+        cards.set(id, { x: x || 0, y: y || 0, text: text || '', lockedBy: null });
+        broadcast({ type: 'card-create', id, x: x || 0, y: y || 0, text: text || '' });
       }
+
     } else if (msg.type === 'card-delete') {
       if (cards.delete(msg.id)) {
-        wss.clients.forEach((c) => {
-          if (c.readyState === 1) {
-            c.send(JSON.stringify({ type: 'card-delete', id: msg.id }));
-          }
-        });
+        broadcast({ type: 'card-delete', id: msg.id });
       }
     }
   });
+
+  const cardData = {};
+  for (const [id, c] of cards) {
+    cardData[id] = {
+      x: c.x, y: c.y, text: c.text || '',
+      lockedBy: c.lockedBy || null
+    };
+  }
+  sendTo(ws, { type: 'init', cards: cardData });
+});
+
+wss.on('close', (ws) => {
+  if (!ws.playerId) return;
+  for (const [id, card] of cards) {
+    if (card.lockedBy === ws.playerId) {
+      card.lockedBy = null;
+      broadcast({ type: 'card-unlock', id });
+    }
+  }
 });
 
 setInterval(() => {
