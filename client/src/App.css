@@ -1,0 +1,265 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  color: #333;
+}
+
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  color: #fff;
+  text-align: center;
+}
+
+.loading-container p,
+.error-container p {
+  margin-top: 16px;
+  font-size: 16px;
+}
+
+.error-container .hint {
+  font-size: 13px;
+  opacity: 0.8;
+  margin-top: 8px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.app-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.app-header {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 20px 28px;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+.app-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #4a3f8a;
+  margin-bottom: 12px;
+}
+
+.legend {
+  display: flex;
+  gap: 24px;
+  font-size: 13px;
+  color: #666;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-box {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid #ddd;
+}
+
+.legend-box.conflict {
+  background: #ffe0e0;
+  border-color: #ff6b6b;
+}
+
+.legend-box.dragging {
+  background: #fff3cd;
+  border-color: #ffc107;
+}
+
+.stats-bar {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  padding: 12px 24px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 32px;
+  font-size: 14px;
+  color: #555;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.schedule-wrapper {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 16px;
+  overflow-x: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+.schedule-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 900px;
+}
+
+.schedule-table thead th {
+  background: linear-gradient(135deg, #4a3f8a, #6b5fc8);
+  color: #fff;
+  padding: 12px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  border: none;
+}
+
+.schedule-table thead th.corner-cell {
+  border-top-left-radius: 10px;
+  width: 120px;
+}
+
+.schedule-table thead th:last-child {
+  border-top-right-radius: 10px;
+}
+
+.room-header .room-cap {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.8;
+  margin-left: 2px;
+}
+
+.schedule-table tbody tr.day-divider td {
+  background: linear-gradient(90deg, #f3e8ff, #e8dcff);
+  color: #6b5fc8;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 16px;
+  letter-spacing: 1px;
+  border: none;
+  border-radius: 6px;
+  margin: 8px 0 4px 0;
+}
+
+.schedule-table tbody tr.time-row td {
+  padding: 8px 6px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.time-cell {
+  background: #fafafa;
+  font-size: 13px;
+  color: #777;
+  text-align: center;
+  width: 120px;
+}
+
+.time-range {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.schedule-cell {
+  min-height: 56px;
+  text-align: center;
+  vertical-align: middle;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  background: #fff;
+}
+
+.schedule-cell.conflict {
+  background: #ffe0e0 !important;
+  box-shadow: inset 0 0 0 2px #ff6b6b;
+}
+
+.schedule-cell.dragging-source {
+  opacity: 0.4;
+}
+
+.schedule-cell:not(.conflict):hover {
+  background: #f8f5ff;
+}
+
+.class-card {
+  background: linear-gradient(135deg, #a29bfe, #6c5ce7);
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: grab;
+  font-size: 13px;
+  user-select: none;
+  box-shadow: 0 2px 8px rgba(108, 92, 231, 0.3);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.class-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.4);
+}
+
+.class-card:active {
+  cursor: grabbing;
+}
+
+.class-card.dragging {
+  background: linear-gradient(135deg, #ffc107, #ff9800);
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.5);
+}
+
+.coach-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.coach-style {
+  font-size: 11px;
+  opacity: 0.9;
+  margin-top: 2px;
+}
+
+.empty-cell {
+  color: #ccc;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.app-footer {
+  text-align: center;
+  margin-top: 24px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.app-footer p {
+  margin: 4px 0;
+}
