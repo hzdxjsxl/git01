@@ -21,11 +21,16 @@ const App = (() => {
     const applicantSelect = document.getElementById('applicant');
     const deptSelect = document.getElementById('dept');
     const amountInput = document.getElementById('amount');
+    const enableParallel = document.getElementById('enableParallel');
+    const parallelGroup = document.getElementById('parallelGroup');
+    const deptCheckboxes = document.getElementById('deptCheckboxes');
     const generateBtn = document.getElementById('generate');
     const showGridToggle = document.getElementById('showGrid');
 
-    const depts = [...new Set(employees.map(e => e.dept))];
-    depts.forEach(dept => {
+    const allDepts = [...new Set(employees.map(e => e.dept))];
+    const deptHeads = employees.filter(e => e.deptHead);
+
+    allDepts.forEach(dept => {
       const opt = document.createElement('option');
       opt.value = dept;
       opt.textContent = dept;
@@ -45,10 +50,30 @@ const App = (() => {
       });
     }
 
+    function initDeptCheckboxes() {
+      deptCheckboxes.innerHTML = '';
+      allDepts.forEach(dept => {
+        const head = deptHeads.find(h => h.dept === dept);
+        const label = document.createElement('label');
+        label.className = 'dept-checkbox';
+        label.innerHTML = `
+          <input type="checkbox" value="${dept}">
+          <span>${dept}</span>
+          ${head ? `<span class="head-name">${head.name}</span>` : ''}
+        `;
+        deptCheckboxes.appendChild(label);
+      });
+    }
+
     updateApplicants(null);
+    initDeptCheckboxes();
 
     deptSelect.addEventListener('change', (e) => {
       updateApplicants(e.target.value);
+    });
+
+    enableParallel.addEventListener('change', (e) => {
+      parallelGroup.style.display = e.target.checked ? 'block' : 'none';
     });
 
     generateBtn.addEventListener('click', handleGenerate);
@@ -103,8 +128,8 @@ const App = (() => {
 
   function handleGenerate() {
     const applicantId = document.getElementById('applicant').value;
-    const dept = document.getElementById('dept').value;
     const amount = parseFloat(document.getElementById('amount').value) || 0;
+    const enableParallel = document.getElementById('enableParallel').checked;
     const showGrid = document.getElementById('showGrid').checked;
 
     if (!applicantId) {
@@ -112,22 +137,44 @@ const App = (() => {
       return;
     }
 
-    try {
-      currentGraph = ApprovalEngine.buildApprovalGraph(employees, applicantId, amount, dept);
+    const coApproverDepts = [];
+    if (enableParallel) {
+      document.querySelectorAll('#deptCheckboxes input[type="checkbox"]:checked').forEach(cb => {
+        coApproverDepts.push(cb.value);
+      });
+    }
 
-      const canvasWidth = Math.max(900, currentGraph.getAllNodes().length * 200);
+    try {
+      const result = ApprovalEngine.buildApprovalGraph(
+        employees, applicantId, amount, {
+          requireMultiDept: enableParallel && coApproverDepts.length > 0,
+          coApproverDepts: coApproverDepts
+        }
+      );
+
+      currentGraph = result.graph;
+      const startId = result.applicantNodeId || applicantId;
+
+      const allNodes = currentGraph.getAllNodes();
+      const maxLayerNodes = Math.max(
+        ...Array.from(new Set(allNodes.map(n => currentGraph.computeAllDepths(startId).get(n.id))))
+          .map(d => allNodes.filter(n => currentGraph.computeAllDepths(startId).get(n.id) === d).length)
+      );
+
+      const canvasWidth = Math.max(1000, maxLayerNodes * 220 + 120);
       canvas.width = canvasWidth;
 
-      currentLayout = LayoutEngine.computeLayout(currentGraph, applicantId, {
+      currentLayout = LayoutEngine.computeLayout(currentGraph, startId, {
         nodeWidth: 180,
         nodeHeight: 70,
         hSpacing: 40,
-        vSpacing: 60,
+        vSpacing: 90,
         canvasWidth: canvasWidth,
-        padding: 50
+        padding: 60
       });
 
       canvas.height = currentLayout.totalHeight;
+      canvas.width = currentLayout.canvasWidth;
 
       Renderer.render(ctx, currentGraph, currentLayout, {
         canvasWidth: canvas.width,
@@ -135,32 +182,52 @@ const App = (() => {
         showGrid: showGrid
       });
 
-      updateInfoPanel(applicantId, amount, dept);
+      updateInfoPanel(applicantId, amount, coApproverDepts, enableParallel);
     } catch (e) {
       console.error('生成审批流失败:', e);
       alert('生成审批流失败: ' + e.message);
     }
   }
 
-  function updateInfoPanel(applicantId, amount, dept) {
+  function updateInfoPanel(applicantId, amount, coApproverDepts, enableParallel) {
     const applicant = employees.find(e => e.id === applicantId);
-    const chain = ApprovalEngine.getApprovalChain(currentGraph);
+    const chain = ApprovalEngine.getApprovalChain(currentGraph, applicantId);
+
+    let parallelHtml = '';
+    if (enableParallel && coApproverDepts.length > 0) {
+      parallelHtml = `
+        <div class="info-row">
+          <span class="info-label">并行部门:</span>
+          <span class="info-value">${coApproverDepts.join('、')}</span>
+        </div>
+      `;
+    }
+
+    const uniqueChain = [];
+    const seen = new Set();
+    chain.forEach(n => {
+      if (!seen.has(n.id)) {
+        seen.add(n.id);
+        uniqueChain.push(n);
+      }
+    });
 
     const infoHtml = `
       <div class="info-card">
         <div class="info-title">申请信息</div>
         <div class="info-row"><span class="info-label">申请人:</span> <span class="info-value">${applicant.name}</span></div>
-        <div class="info-row"><span class="info-label">部门:</span> <span class="info-value">${dept || applicant.dept}</span></div>
+        <div class="info-row"><span class="info-label">部门:</span> <span class="info-value">${applicant.dept}</span></div>
         <div class="info-row"><span class="info-label">申请金额:</span> <span class="info-value amount">￥${amount.toLocaleString()}</span></div>
+        ${parallelHtml}
       </div>
       <div class="info-card">
-        <div class="info-title">审批链 (${chain.length} 人)</div>
-        ${chain.map((node, idx) => `
-          <div class="chain-item ${idx === chain.length - 1 ? 'final' : ''}">
+        <div class="info-title">审批链 (${uniqueChain.length} 人)</div>
+        ${uniqueChain.map((node, idx) => `
+          <div class="chain-item ${node.nodeType === 'final_approver' ? 'final' : ''}">
             <span class="chain-index">${idx + 1}</span>
             <span class="chain-name">${node.name}</span>
             <span class="chain-role">${node.title}</span>
-            <span class="chain-badge ${node.nodeType}">${node.nodeType === 'applicant' ? '申请人' : node.nodeType === 'final_approver' ? '终审' : '审批'}</span>
+            <span class="chain-badge ${node.nodeType}">${getNodeTypeLabel(node.nodeType)}</span>
           </div>
         `).join('')}
       </div>
@@ -169,22 +236,39 @@ const App = (() => {
     document.getElementById('infoPanel').innerHTML = infoHtml;
   }
 
+  function getNodeTypeLabel(type) {
+    const labels = {
+      applicant: '申请人',
+      approver: '审批',
+      final_approver: '终审',
+      fork: '分支',
+      merge: '汇聚'
+    };
+    return labels[type] || type;
+  }
+
   async function init() {
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
 
     await loadEmployees();
-    const settings = initControls();
+    initControls();
 
-    canvas.width = 900;
-    canvas.height = 400;
-    ctx.fillStyle = '#f8fafc';
+    canvas.width = 1000;
+    canvas.height = 500;
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    gradient.addColorStop(0, '#f8fafc');
+    gradient.addColorStop(1, '#f1f5f9');
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = '#64748b';
-    ctx.font = '18px "Microsoft YaHei", sans-serif';
+    ctx.font = '20px "Microsoft YaHei", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('请在左侧配置申请人、部门和金额，点击"生成审批流"查看流程', canvas.width / 2, canvas.height / 2);
+    ctx.fillText('请在左侧配置申请人、金额和并行部门，点击"生成审批流"', canvas.width / 2, canvas.height / 2 - 15);
+    ctx.font = '14px "Microsoft YaHei", sans-serif';
+    ctx.fillText('支持跨部门并行审批 · Sugiyama 分层布局 · 智能连线路由', canvas.width / 2, canvas.height / 2 + 20);
 
     console.log('审批流系统初始化完成');
     console.log('员工数据:', employees.length, '人');

@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>审批流可视化系统</title>
+  <title>审批流可视化系统 - 并行审批引擎</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="app">
     <header class="app-header">
       <div class="header-left">
-        <div class="logo">✓</div>
+        <div class="logo">⚡</div>
         <div class="title-group">
           <h1>审批流可视化系统</h1>
-          <p class="subtitle">基于有向图的动态审批流程引擎</p>
+          <p class="subtitle">并行审批 · 有向图引擎 · Sugiyama 分层布局</p>
         </div>
       </div>
       <div class="header-right">
@@ -25,7 +25,7 @@
     <main class="app-main">
       <aside class="sidebar">
         <div class="panel">
-          <div class="panel-title">流程配置</div>
+          <div class="panel-title">审批配置</div>
 
           <div class="form-group">
             <label for="dept">选择部门</label>
@@ -41,7 +41,17 @@
 
           <div class="form-group">
             <label for="amount">申请金额 (元)</label>
-            <input type="number" id="amount" class="form-control" value="50000" min="0" step="1000">
+            <input type="number" id="amount" class="form-control" value="150000" min="0" step="10000">
+          </div>
+
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="enableParallel" checked>
+            <label for="enableParallel">启用跨部门并行审批</label>
+          </div>
+
+          <div class="form-group" id="parallelGroup">
+            <label>选择参与并行审批的部门</label>
+            <div class="dept-checkboxes" id="deptCheckboxes"></div>
           </div>
 
           <div class="form-group checkbox-group">
@@ -50,7 +60,7 @@
           </div>
 
           <button id="generate" class="btn btn-primary">
-            <span>⚡</span> 生成审批流
+            <span>🚀</span> 生成审批流
           </button>
 
           <button id="resetZoom" class="btn btn-secondary">
@@ -58,14 +68,40 @@
           </button>
         </div>
 
+        <div class="panel legend-panel">
+          <div class="panel-title">图例说明</div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:#3b82f6"></div>
+            <span>申请人</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:#10b981"></div>
+            <span>审批人</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:#f59e0b"></div>
+            <span>终审人</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:#8b5cf6"></div>
+            <span>并行分支</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background:#ec4899"></div>
+            <span>并行汇聚</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot"></div>
+            <span>虚拟节点</span>
+          </div>
+        </div>
+
         <div class="panel">
           <div class="panel-title">操作提示</div>
           <ul class="tips">
             <li>滚轮缩放画布</li>
             <li>拖拽平移画布</li>
-            <li>蓝色=申请人</li>
-            <li>绿色=审批人</li>
-            <li>橙色=终审人</li>
+            <li>勾选多个部门查看并行审批</li>
           </ul>
         </div>
 
@@ -80,9 +116,9 @@
     </main>
 
     <footer class="app-footer">
-      <span>审批流可视化系统 v1.0</span>
+      <span>审批流可视化系统 v2.0</span>
       <span class="footer-sep">|</span>
-      <span>有向图解析 + 动态审批链 + 无交叉排版</span>
+      <span>Sugiyama 分层算法 · barycenter 交叉最小化 · 智能连线路由</span>
     </footer>
   </div>
 
